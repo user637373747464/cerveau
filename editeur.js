@@ -418,7 +418,8 @@
       synchroniser();
       verifierWiki();
     });
-    corps.addEventListener('blur', () => { sauverMaintenant(); setTimeout(() => { if (document.activeElement !== corps) fermerWiki(); }, 150); });
+    corps.addEventListener('focus', () => setTimeout(majClavier, 50));
+    corps.addEventListener('blur', () => { setTimeout(majClavier, 0); sauverMaintenant(); setTimeout(() => { if (document.activeElement !== corps) fermerWiki(); }, 150); });
     corps.addEventListener('beforeinput', (e) => {            // Entrée dans une liste de cases : on continue la liste
       if (mode !== 'ecrire' || e.inputType !== 'insertParagraph') return;
       const b = blocCourant();
@@ -462,11 +463,16 @@
     });
 
     /* ---------- ouverture / fermeture ---------- */
+    function majClavier() {                 // clavier ouvert pendant qu'on écrit la note : on libère de la place (jamais si le curseur est dans un autre champ, sinon il disparaîtrait)
+      const vv = racine.visualViewport;
+      const ouvertClavier = !!vv && racine.innerHeight - vv.height > 140;
+      ed.classList.toggle('clavier', ouvertClavier && mode === 'ecrire' && ouvert && document.activeElement === corps);
+    }
     function ajuster() {
       const vv = racine.visualViewport;
       if (!vv || !ouvert) return;
       ed.style.height = vv.height + 'px'; ed.style.top = vv.offsetTop + 'px';
-      ed.classList.toggle('clavier', racine.innerHeight - vv.height > 140 && mode === 'ecrire');   // clavier ouvert : on libère de la place pour le texte
+      majClavier();
       if (racine.scrollY) racine.scrollTo(0, 0);
     }
     if (racine.visualViewport) { racine.visualViewport.addEventListener('resize', ajuster); racine.visualViewport.addEventListener('scroll', ajuster); }
