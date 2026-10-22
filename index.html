@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cerveau">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="vendor/katex/katex.min.css">
+<link rel="stylesheet" href="styles.css">
+<title>Cerveau</title>
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ CARTE ============ -->
+  <section id="vue-carte" class="vue">
+    <canvas id="cv"></canvas>
+
+    <div class="haut">
+      <button class="rond verre" id="b-loupe" aria-label="Rechercher"></button>
+      <div class="espace"></div>
+      <button class="rond verre" id="b-centrer" aria-label="Tout voir"></button>
+      <button class="rond blanc" id="b-plus" aria-label="Nouveau sommet"></button>
+    </div>
+
+    <div id="recherche" class="panneau cache">
+      <input id="q" type="search" placeholder="Mot-clé, #tag…" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
+      <div id="q-tags" class="puces"></div>
+      <div id="q-res" class="liste-res"></div>
+    </div>
+
+    <div id="vide" class="vide cache">
+      <b>Ta carte est vide.</b>
+      <span>Touche le <i>+</i> en haut pour créer ton premier sommet.</span>
+    </div>
+
+    <div id="bandeau" class="bandeau cache"></div>
+
+    <div id="carte-sel" class="carte-sel cache">
+      <div class="cs-titre"><b id="cs-nom"></b><small id="cs-info"></small></div>
+      <div class="cs-actions">
+        <button class="act plein" data-a="ouvrir">Ouvrir</button>
+        <button class="act" data-a="enfant">+ Enfant</button>
+        <button class="act" data-a="relier">Relier à…</button>
+        <button class="act" data-a="aspect">Aspect</button>
+        <button class="act" data-a="epingle">Fixer</button>
+        <button class="act danger" data-a="suppr">Supprimer</button>
+      </div>
+      <div id="cs-aspect" class="cs-aspect cache"></div>
+    </div>
+  </section>
+
+  <!-- ============ NOTES ============ -->
+  <section id="vue-notes" class="vue">
+    <div class="page">
+      <h1>Notes</h1>
+      <div class="barre-notes">
+        <input id="nq" type="search" placeholder="Chercher dans mes notes" autocomplete="off" autocapitalize="off" spellcheck="false">
+      </div>
+      <div id="n-tags" class="puces"></div>
+      <div class="rangee">
+        <button class="act plein" id="n-nouveau">+ Nouveau sommet</button>
+        <button class="act" id="n-jour">Aujourd'hui</button>
+      </div>
+      <div id="n-liste" class="liste-notes"></div>
+    </div>
+  </section>
+
+  <!-- ============ RÉGLAGES ============ -->
+  <section id="vue-reglages" class="vue">
+    <div class="page">
+      <h1>Réglages</h1>
+
+      <div class="bloc">
+        <h2>Comment ça marche</h2>
+        <p class="aide" style="margin:0">
+          <b>Carte</b> : un doigt tourne la carte, deux doigts zooment et la déplacent. Touche un sommet pour le choisir, touche-le deux fois pour ouvrir sa note. Quand il est choisi, glisse-le pour le placer où tu veux (il reste alors fixe).<br><br>
+          <b>Note</b> : l'œil en haut passe en lecture (formules, cases à cocher). Écris une formule entre <b>$$ … $$</b>, puis touche l'œil pour la voir. Le bouton ☐ fait une case à cocher, 📎 ajoute photo, vidéo ou PDF, 🔗 un lien (YouTube : une vignette cliquable).
+        </p>
+      </div>
+
+      <div class="bloc">
+        <h2>Mon code couleur</h2>
+        <p class="aide">Les couleurs pour surligner et colorer ton texte. Tu choisis ce que chacune veut dire.</p>
+        <div id="r-palette" class="palette-apercu"></div>
+        <button class="act" id="r-palette-edit">Modifier mon code</button>
+      </div>
+
+      <div class="bloc">
+        <h2>Carte</h2>
+        <button class="interrupteur" id="r-anim" role="switch" aria-checked="true"><span>Animation douce<small>Étoiles et sommets qui tournent lentement. Désactive pour économiser la batterie.</small></span><i class="sw on"></i></button>
+      </div>
+
+      <div class="bloc">
+        <h2>Sauvegarde</h2>
+        <p class="aide">Tout est gardé dans ton iPhone, rien n'est envoyé sur Internet. Fais une sauvegarde de temps en temps : si Safari vide ses données ou si tu changes de téléphone, c'est ta seule copie.</p>
+        <div id="r-stock" class="aide"></div>
+        <div class="rangee">
+          <button class="act plein" id="r-export">Sauvegarder</button>
+          <button class="act" id="r-import">Restaurer</button>
+        </div>
+        <input id="f-import" type="file" class="cache" accept=".cerveau,application/octet-stream">
+      </div>
+
+      <div class="bloc">
+        <h2>Autres</h2>
+        <div class="rangee">
+          <button class="act" id="r-exemple">Ajouter un exemple</button>
+          <button class="act danger" id="r-efface">Tout effacer</button>
+        </div>
+      </div>
+      <p class="aide centre">Cerveau · version 1</p>
+    </div>
+  </section>
+
+  <!-- ============ ONGLETS ============ -->
+  <nav id="onglets">
+    <button data-v="carte" class="actif"><i id="ic-carte"></i><span>Carte</span></button>
+    <button data-v="notes"><i id="ic-notes"></i><span>Notes</span></button>
+    <button data-v="reglages"><i id="ic-reglages"></i><span>Réglages</span></button>
+  </nav>
+
+  <!-- ============ ÉDITEUR DE NOTE ============ -->
+  <section id="editeur" class="editeur cache">
+    <header class="ed-haut">
+      <button class="rond verre" id="ed-retour" aria-label="Retour"></button>
+      <input id="ed-titre" type="text" placeholder="Titre du sommet" autocomplete="off" enterkeyhint="done">
+      <button class="rond verre" id="ed-mode" aria-label="Lire / Écrire"></button>
+      <button class="rond verre" id="ed-plus" aria-label="Plus"></button>
+    </header>
+    <div id="ed-tags" class="ed-tags"></div>
+    <div id="ed-corps" class="corps" contenteditable="true" spellcheck="true" lang="fr" autocapitalize="sentences"></div>
+    <div id="ed-menu" class="menu-flottant cache"></div>
+    <div id="ed-barre" class="barre-outils">
+      <div id="ed-pop" class="pop cache"></div>
+      <div class="defile" id="ed-outils"></div>
+    </div>
+    <input id="f-pj" type="file" class="cache" multiple>
+  </section>
+
+  <div id="visionneuse" class="visionneuse cache"></div>
+  <div id="modale" class="modale cache"></div>
+  <div id="toast" class="toast cache"></div>
+</div>
+
+<script src="vendor/katex/katex.min.js"></script>
+<script src="db.js"></script>
+<script src="carte.js"></script>
+<script src="editeur.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
