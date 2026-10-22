@@ -120,6 +120,7 @@
     function serialiser() {
       const c = corps.cloneNode(true);
       c.querySelectorAll('img[data-f],video[data-f]').forEach((e) => e.removeAttribute('src'));
+      c.querySelectorAll('[data-repere]').forEach((e) => e.remove());
       let h = c.innerHTML;
       if (h === '<br>' || h === '<div><br></div>') h = '';
       return h;
@@ -142,10 +143,32 @@
 
     /* ---------- sélection / insertion ---------- */
     function memoriserSel() { const s = getSelection(); if (s.rangeCount && corps.contains(s.anchorNode)) selSauvee = s.getRangeAt(0).cloneRange(); }
-    function restaurerSel() { corps.focus(); if (selSauvee) { const s = getSelection(); s.removeAllRanges(); s.addRange(selSauvee); selSauvee = null; } }
+    let derniereSel = null;                // dernier endroit où se trouvait le curseur dans la note
+    document.addEventListener('selectionchange', () => { if (!ouvert || mode !== 'ecrire') return; const s = getSelection(); if (s.rangeCount && corps.contains(s.anchorNode)) derniereSel = s.getRangeAt(0).cloneRange(); });
+    function restaurerSel() {
+      corps.focus();
+      const r = selSauvee || derniereSel; selSauvee = null;
+      if (r && corps.contains(r.startContainer) && corps.contains(r.endContainer)) { try { const s = getSelection(); s.removeAllRanges(); s.addRange(r); } catch (e) { /* tant pis */ } }
+    }
+    function retirerRepere() { corps.querySelectorAll('[data-repere]').forEach((x) => x.remove()); }
+    function poserRepere() {               // on plante un petit repère invisible à l'endroit du curseur : l'insertion se fera exactement là, même après une fenêtre ou un sélecteur de fichier
+      retirerRepere();
+      const sel = getSelection(); let r = null;
+      if (sel.rangeCount && corps.contains(sel.anchorNode)) r = sel.getRangeAt(0).cloneRange();
+      else if (derniereSel && corps.contains(derniereSel.startContainer)) r = derniereSel.cloneRange();
+      if (!r) { r = document.createRange(); r.selectNodeContents(corps); r.collapse(false); }
+      if (!r.collapsed) { selSauvee = r; return; }      // du texte est sélectionné : on garde la sélection
+      const m = document.createElement('span'); m.setAttribute('data-repere', '1');
+      r.insertNode(m);
+    }
     function cmd(c, v) { if (mode !== 'ecrire') return; if (document.activeElement !== corps) restaurerSel(); document.execCommand(c, false, v); synchroniser(); }
     function inserer(html) {
-      if (document.activeElement !== corps) restaurerSel();
+      const m = corps.querySelector('[data-repere]');
+      if (m) {
+        corps.focus();
+        const r = document.createRange(); r.setStartBefore(m); r.collapse(true);
+        const s = getSelection(); s.removeAllRanges(); s.addRange(r); m.remove();
+      } else if (document.activeElement !== corps) restaurerSel();
       if (!document.execCommand('insertHTML', false, html)) corps.insertAdjacentHTML('beforeend', html);
     }
     const EST_BLOC = /^(DIV|P|LI|H[1-6]|BLOCKQUOTE)$/;
@@ -184,6 +207,69 @@
       return true;
     }
 
+    /* ---------- liens entre pages : [[ ouvre la liste des sommets ---------- */
+    const wikiBox = $('ed-wiki');
+    const norm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+    const nomDe = (x) => x.titre || 'Sans titre';
+    const wikiHtml = (c) => '<a class="wiki" data-n="' + esc(c.id) + '" contenteditable="false">' + esc(nomDe(c)) + '</a>';
+    function fermerWiki() { wikiBox.classList.add('cache'); wikiBox.innerHTML = ''; }
+    function resoudreWiki(rac) {                 // remet le titre à jour (si la page a été renommée) ou marque la page supprimée
+      rac.querySelectorAll('a.wiki').forEach((a) => {
+        const c = ctx.parId.get(a.getAttribute('data-n'));
+        if (c) { a.textContent = nomDe(c); a.classList.remove('mort'); } else a.classList.add('mort');
+      });
+    }
+    function avantCurseur() {
+      const s = getSelection();
+      if (!s.rangeCount || !s.isCollapsed) return null;
+      const nd = s.anchorNode;
+      if (!nd || nd.nodeType !== 3 || !corps.contains(nd)) return null;
+      return { nd, off: s.anchorOffset, txt: nd.nodeValue.slice(0, s.anchorOffset) };
+    }
+    function poserWiki(t, m, cible, q) {
+      let c = cible;
+      if (!c) { c = ctx.creerNoeud(q, n); ctx.toast('Page « ' + q.slice(0, 24) + ' » créée et reliée'); }
+      const r = document.createRange(); r.setStart(t.nd, t.off - m[0].length); r.setEnd(t.nd, t.off);
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      document.execCommand('insertHTML', false, wikiHtml(c) + '&nbsp;');
+      fermerWiki(); synchroniser();
+    }
+    function verifierWiki() {
+      if (mode !== 'ecrire') return fermerWiki();
+      const t = avantCurseur(); if (!t) return fermerWiki();
+      let m = /\[\[([^\[\]]+)\]\]$/.exec(t.txt);
+      if (m && m[1].trim()) {                                            // [[Titre]] tapé en entier
+        const q = m[1].trim(), c = ctx.etat.noeuds.find((x) => x !== n && norm(nomDe(x)) === norm(q)) || null;
+        poserWiki(t, m, c, q); return;
+      }
+      m = /\[\[([^\[\]]*)$/.exec(t.txt);
+      if (!m) return fermerWiki();
+      const q = m[1], nq = norm(q);
+      let liste = ctx.etat.noeuds.filter((x) => x !== n && (!nq || norm(nomDe(x)).includes(nq)));
+      liste.sort((a, b) => (norm(nomDe(b)).startsWith(nq) ? 1 : 0) - (norm(nomDe(a)).startsWith(nq) ? 1 : 0) || nomDe(a).localeCompare(nomDe(b), 'fr'));
+      liste = liste.slice(0, 20);
+      wikiBox.innerHTML = '';
+      liste.forEach((c) => {
+        const b = document.createElement('button'); b.className = 'w-ligne'; b.innerHTML = '<i style="background:' + esc(c.couleur || '#fff') + '"></i>' + esc(nomDe(c));
+        b.addEventListener('click', () => poserWiki(t, m, c, q)); wikiBox.appendChild(b);
+      });
+      if (q.trim() && !ctx.etat.noeuds.some((x) => norm(nomDe(x)) === nq)) {
+        const b = document.createElement('button'); b.className = 'w-ligne nouveau'; b.textContent = '+ Créer la page « ' + q.trim() + ' »';
+        b.addEventListener('click', () => poserWiki(t, m, null, q.trim())); wikiBox.appendChild(b);
+      }
+      if (!wikiBox.children.length) { const p = document.createElement('div'); p.className = 'w-vide'; p.textContent = 'Écris le nom d’une page…'; wikiBox.appendChild(p); }
+      wikiBox.classList.remove('cache');
+    }
+    wikiBox.addEventListener('pointerdown', (e) => e.preventDefault());
+    const pileNav = [];                                        // pages d'où l'on vient : « retour » y revient
+    function allerWiki(id) {
+      const c = ctx.parId.get(id);
+      if (!c) { ctx.toast('Cette page a été supprimée'); return; }
+      sauverMaintenant(); fermerWiki();
+      pileNav.push(n.id);
+      ouvrir(c, { mode: c.html ? 'lire' : 'ecrire' });
+    }
+
     /* ---------- barre d'outils ---------- */
     function popPalette(genre) {
       const pal = ctx.palette();
@@ -220,11 +306,12 @@
       cmd('fontSize', String(Math.max(1, Math.min(7, cur + d))));
     }
     async function boutonLien() {
-      memoriserSel();
-      const sel = getSelection(), texteSel = sel.toString();
-      const r = await ctx.modale.saisie('Ajouter un lien', 'https://…  (YouTube, site, PDF en ligne…)', '', { type: 'url', ok: 'Ajouter' });
-      restaurerSel();
-      if (!r) return;
+      if (document.activeElement !== corps) restaurerSel();
+      poserRepere();
+      const texteSel = selSauvee ? selSauvee.toString() : '';
+      const r = await ctx.modale.lienColle('Ajouter un lien');
+      if (!r) { retirerRepere(); restaurerSel(); return; }
+      if (selSauvee) restaurerSel();
       let url = r.trim();
       if (!url) return;
       if (idYoutube(url)) { insererYoutube(url); return; }
@@ -261,7 +348,7 @@
       { h: '❝', f: () => cmd('formatBlock', '<blockquote>'), l: 'Citation' },
       { sep: 1 },
       { h: '🔗', f: boutonLien, l: 'Lien' },
-      { h: '📎', f: () => { memoriserSel(); fpj.value = ''; fpj.click(); }, l: 'Photo, vidéo, PDF…' },
+      { h: '📎', f: () => { if (document.activeElement !== corps) restaurerSel(); poserRepere(); fpj.value = ''; fpj.click(); }, l: 'Photo, vidéo, PDF…' },
       { h: '∑', f: boutonFormule, l: 'Formule $$…$$' },
       { sep: 1 },
       { h: '↶', f: () => cmd('undo'), l: 'Annuler' },
@@ -288,16 +375,16 @@
       if (mode === 'lire') return;
       sauverMaintenant(); fermerPop();
       mode = 'lire';
-      corps.contentEditable = 'false'; corps.classList.add('lecture'); barre.classList.add('cache');
+      corps.contentEditable = 'false'; corps.classList.add('lecture'); barre.classList.add('cache'); ed.classList.remove('clavier'); fermerWiki();
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       corps.innerHTML = n.html || '';
       if (!n.html) corps.innerHTML = '';
-      rendreMaths(corps); hydrater(corps); icones();
+      resoudreWiki(corps); rendreMaths(corps); hydrater(corps); icones();
     }
     function versEcriture(focus) {
       mode = 'ecrire';
       corps.contentEditable = 'true'; corps.classList.remove('lecture'); barre.classList.remove('cache');
-      corps.innerHTML = n.html || ''; hydrater(corps); base = serialiser(); icones();
+      corps.innerHTML = n.html || ''; resoudreWiki(corps); hydrater(corps); base = serialiser(); icones();
       if (focus) { corps.focus(); placerFin(corps); }
     }
 
@@ -329,8 +416,9 @@
       const h = corps.innerHTML;
       if (h === '<br>' || h === '<div><br></div>') corps.innerHTML = '';
       synchroniser();
+      verifierWiki();
     });
-    corps.addEventListener('blur', () => { sauverMaintenant(); });
+    corps.addEventListener('blur', () => { sauverMaintenant(); setTimeout(() => { if (document.activeElement !== corps) fermerWiki(); }, 150); });
     corps.addEventListener('beforeinput', (e) => {            // Entrée dans une liste de cases : on continue la liste
       if (mode !== 'ecrire' || e.inputType !== 'insertParagraph') return;
       const b = blocCourant();
@@ -363,6 +451,8 @@
         } else { coche.setAttribute('data-on', on); synchroniser(); }
         return;
       }
+      const wk = cible.closest && cible.closest('a.wiki');
+      if (wk) { e.preventDefault(); allerWiki(wk.getAttribute('data-n')); return; }
       const fich = cible.closest && cible.closest('a.fichier');
       if (fich) { e.preventDefault(); ouvrirFichier(fich.getAttribute('data-f')); return; }
       const img = cible.closest && cible.closest('img[data-f]');
@@ -376,11 +466,18 @@
       const vv = racine.visualViewport;
       if (!vv || !ouvert) return;
       ed.style.height = vv.height + 'px'; ed.style.top = vv.offsetTop + 'px';
+      ed.classList.toggle('clavier', racine.innerHeight - vv.height > 140 && mode === 'ecrire');   // clavier ouvert : on libère de la place pour le texte
       if (racine.scrollY) racine.scrollTo(0, 0);
     }
     if (racine.visualViewport) { racine.visualViewport.addEventListener('resize', ajuster); racine.visualViewport.addEventListener('scroll', ajuster); }
 
-    $('ed-retour').addEventListener('click', () => fermer());
+    $('ed-retour').addEventListener('click', () => {
+      while (pileNav.length) {
+        const prec = ctx.parId.get(pileNav.pop());
+        if (prec) { sauverMaintenant(); fermerWiki(); ouvrir(prec, { mode: prec.html ? 'lire' : 'ecrire' }); return; }
+      }
+      fermer();
+    });
     $('ed-mode').addEventListener('click', () => { if (mode === 'lire') versEcriture(true); else versLecture(); });
     $('ed-plus').addEventListener('click', () => {
       if (!menu.classList.contains('cache')) { menu.classList.add('cache'); return; }
@@ -405,7 +502,7 @@
       if (modeVoulu === 'lire') {
         mode = 'lire';
         corps.contentEditable = 'false'; corps.classList.add('lecture'); barre.classList.add('cache');
-        corps.innerHTML = n.html || ''; rendreMaths(corps); hydrater(corps);
+        corps.innerHTML = n.html || ''; resoudreWiki(corps); rendreMaths(corps); hydrater(corps);
       } else { versEcriture(false); if (!titre.value) titre.focus(); else corps.focus(); }
       icones();
     }
@@ -413,7 +510,7 @@
       if (!ouvert) return;
       sauverMaintenant();
       const noeud = n;
-      ouvert = false; n = null;
+      ouvert = false; n = null; pileNav.length = 0; fermerWiki(); ed.classList.remove('clavier');
       ed.classList.add('cache'); ed.style.height = ''; ed.style.top = '';
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       urls.forEach((u) => URL.revokeObjectURL(u)); urls.clear();

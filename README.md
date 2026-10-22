@@ -35,3 +35,13 @@ qu'on n'a pas ajouté à l'écran d'accueil. Dans **Réglages → Sauvegarder**,
 
 HTML + JavaScript, aucune bibliothèque externe sauf KaTeX (formules, dans `vendor/`). La 3D est dessinée par `carte.js`.
 Stockage : IndexedDB. Fonctionne hors‑ligne après la première ouverture.
+
+## Nouveautés (v2)
+
+- **Taille d'un sommet** : Petit / Moyen / Grand, dans « Forme et couleur » (à côté de la forme et de la couleur).
+- **Liens sans clavier** : 🔗 → « Coller le lien » (copie ton lien avant, iOS te demande de confirmer le collage).
+- **Vidéo / lien / fichier** : s'insère là où se trouve ton curseur (plus en haut de la page).
+- **Liens entre pages** : dans une note, tape `[[` → liste de tes sommets (ou « Créer la page… », qui la crée et la relie sur la carte). Le mot apparaît surligné en bleu ; touche-le pour aller sur la page, « ‹ » pour revenir. `[[Despote]]` tapé en entier marche aussi.
+- **Clavier ouvert** : les tags disparaissent et l'en-tête se réduit pour laisser plus de place au texte. Le bouton « œil » passe en lecture sans clavier.
+
+Pour mettre à jour : remplace les fichiers dans ton dépôt, puis ferme et rouvre l'appli deux fois. Tes notes ne bougent pas.

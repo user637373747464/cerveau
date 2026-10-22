@@ -117,7 +117,8 @@
       n._sy = H / 2 - (base.foc * dot(d, base.u)) / Z;
       n._pr = (base.foc * rayon(n)) / Z;
     }
-    const rayon = (n) => 0.8 + 0.17 * Math.min(n._deg || 0, 10);
+    const FACT_TAILLE = [0, 0.62, 1, 1.6];
+    const rayon = (n) => (0.8 + 0.17 * Math.min(n._deg || 0, 10)) * FACT_TAILLE[n.taille || 2];
 
     function glisser(n, distance) {
       const d1 = distance || Math.max(7, Math.min(cam.dist, 11));

@@ -185,3 +185,32 @@ input { font: inherit; color: inherit; }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--onglets) + var(--bas-sur) + 74px); background: #fff; color: #000; font-weight: 700; padding: 11px 18px; border-radius: 999px; z-index: 100; font-size: 15px; max-width: 86%; text-align: center; }
 
 @media (min-width: 700px) { .carte-sel { left: 50%; right: auto; width: 560px; transform: translateX(-50%); } }
+
+/* ---------- taille des sommets, liens entre pages, clavier ---------- */
+.tailles { display: flex; gap: 8px; margin-top: 8px; }
+.taille { flex: 1; padding: 8px 6px; border-radius: 14px; background: var(--surface2); border: 1px solid var(--trait); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; font-size: 11px; color: var(--gris); font-weight: 600; min-height: 56px; }
+.taille i { display: block; border-radius: 50%; background: var(--texte); }
+.taille.on { background: #fff; color: #000; border-color: #fff; } .taille.on i { background: #000; }
+.corps a.wiki { color: #9cc4ff; background: rgba(110, 168, 255, .2); border-radius: 6px; padding: 0 5px; text-decoration: none; font-weight: 600; white-space: nowrap; }
+.corps a.wiki.mort { color: var(--gris); background: rgba(255, 255, 255, .08); text-decoration: line-through; }
+.wiki-pop { flex: none; max-height: 34%; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--surface); border-top: 1px solid var(--trait); padding: 4px 8px; }
+.w-ligne { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 11px 10px; border-radius: 10px; font-size: 16px; font-weight: 600; }
+.w-ligne i { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.w-ligne.nouveau { color: #9cc4ff; } .w-ligne:active { background: var(--surface2); }
+.w-vide { padding: 12px; color: var(--gris); font-size: 14px; }
+.editeur.clavier .ed-tags { display: none; }
+.editeur.clavier .ed-haut { padding-bottom: 0; }
+.editeur.clavier #ed-titre { font-size: 17px; padding: 2px 4px; }
+.editeur.clavier .ed-haut .rond { width: 34px; height: 34px; }
+.editeur.clavier .corps { padding-bottom: 12px; }
+.act.gros { width: 100%; padding: 16px; font-size: 17px; margin: 6px 0 10px; }
+.petit { font-size: 13px; color: var(--gris); }
+#m-secours input { width: 100%; }
+.menu-flottant .aspect { width: min(330px, calc(100vw - 40px)); display: flex; flex-direction: column; gap: 10px; }
+.menu-flottant .aspect.cache { display: none; }
+.menu-flottant .aspect button { width: auto; text-align: center; }
+.menu-flottant .aspect .forme { display: flex; padding: 8px 6px; min-width: 64px; font-size: 11px; }
+.menu-flottant .aspect .taille { display: flex; flex: 1; padding: 8px 6px; font-size: 11px; }
+.menu-flottant .aspect .pastille { display: block; width: 36px; padding: 0; }
+.menu-flottant .aspect .tailles { margin-top: 0; }
+.menu-flottant .aspect .pastille { border-radius: 50%; height: 36px; }

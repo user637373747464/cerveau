@@ -34,10 +34,10 @@
   const dateFr = (t, o) => new Date(t).toLocaleDateString('fr-FR', o || { day: 'numeric', month: 'short' });
   const normaliser = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
-  function pur(n) { return { id: n.id, titre: n.titre, html: n.html, texte: n.texte, tags: n.tags, x: n.x, y: n.y, z: n.z, forme: n.forme, couleur: n.couleur, fixe: !!n.fixe, jour: n.jour || null, cree: n.cree, modifie: n.modifie }; }
+  function pur(n) { return { id: n.id, titre: n.titre, html: n.html, texte: n.texte, tags: n.tags, x: n.x, y: n.y, z: n.z, forme: n.forme, couleur: n.couleur, taille: n.taille || 2, fixe: !!n.fixe, jour: n.jour || null, cree: n.cree, modifie: n.modifie }; }
   function completer(n) {
     return { id: n.id || nouvelId(), titre: n.titre || '', html: n.html || '', texte: n.texte || '', tags: Array.isArray(n.tags) ? n.tags : [], x: +n.x || 0, y: +n.y || 0, z: +n.z || 0,
-      forme: n.forme || 'sphere', couleur: n.couleur || COULEURS_NOEUD[0], fixe: !!n.fixe, jour: n.jour || null, cree: n.cree || Date.now(), modifie: n.modifie || Date.now() };
+      forme: n.forme || 'sphere', couleur: n.couleur || COULEURS_NOEUD[0], taille: [1, 2, 3].includes(+n.taille) ? +n.taille : 2, fixe: !!n.fixe, jour: n.jour || null, cree: n.cree || Date.now(), modifie: n.modifie || Date.now() };
   }
   function indexer() { parId.clear(); etat.noeuds.forEach((n) => parId.set(n.id, n)); carte && carte.reindexer(); }
 
@@ -87,6 +87,28 @@
       setTimeout(() => { const i = m.querySelector('#m-in'); if (i) { i.focus(); i.select(); } }, 60);
     });
   }
+  // lien : on colle depuis le presse-papiers, sans ouvrir le clavier
+  function lienColle(titre) {
+    return new Promise((res) => {
+      ouvrirModale('<h3>' + esc(titre || 'Ajouter un lien') + '</h3><p>Copie ton lien (YouTube, site, PDF…) puis touche « Coller ».</p>' +
+        '<button class="act plein gros" id="m-coller">Coller le lien</button>' +
+        '<div id="m-secours" class="cache"><p class="petit">Si rien ne se passe : appuie longtemps dans le cadre ci-dessous, puis « Coller ».</p><input id="m-in" type="text" inputmode="none" placeholder="Appui long ici → Coller" autocomplete="off" autocapitalize="off" spellcheck="false"></div>' +
+        '<div class="boutons"><button class="act" id="m-non">Annuler</button></div>', (boite, fermer) => {
+        const fin = (v) => { fermer(); res(v); };
+        const inp = boite.querySelector('#m-in');
+        boite.querySelector('#m-non').onclick = () => fin(null);
+        $('modale')._annuler = () => fin(null);
+        const secours = () => { boite.querySelector('#m-secours').classList.remove('cache'); };
+        inp.addEventListener('input', () => { if (inp.value.trim()) fin(inp.value.trim()); });
+        boite.querySelector('#m-coller').onclick = async () => {
+          try {
+            const t = ((await navigator.clipboard.readText()) || '').trim();
+            if (t) fin(t); else { toast('Presse-papiers vide : copie d\'abord ton lien'); }
+          } catch (e) { secours(); }
+        };
+      });
+    });
+  }
   function confirmer(titre, texte, ok, danger) {
     return new Promise((res) => {
       ouvrirModale('<h3>' + esc(titre) + '</h3><p>' + esc(texte) + '</p><div class="boutons"><button class="act" id="m-non">Annuler</button><button class="act ' + (danger ? 'danger' : 'plein') + '" id="m-ok">' + esc(ok || 'OK') + '</button></div>', (boite, fermer) => {
@@ -131,13 +153,19 @@
       b.onclick = () => { n.forme = id; n.modifie = Date.now(); sauverNoeud(n); carte.redessiner(); construireAspect(cont, n); };
       f.appendChild(b);
     });
+    const t = document.createElement('div'); t.className = 'tailles';
+    [[1, 'Petit', 10], [2, 'Moyen', 16], [3, 'Grand', 24]].forEach(([v, nom, d]) => {
+      const b = document.createElement('button'); b.className = 'taille' + ((n.taille || 2) === v ? ' on' : ''); b.innerHTML = '<i style="width:' + d + 'px;height:' + d + 'px"></i>' + nom;
+      b.onclick = () => { n.taille = v; n.modifie = Date.now(); sauverNoeud(n); carte.redessiner(); construireAspect(cont, n); };
+      t.appendChild(b);
+    });
     const c = document.createElement('div'); c.className = 'couleurs';
     COULEURS_NOEUD.concat(etat.meta.palette.map((p) => p.c)).filter((x, i, a) => a.indexOf(x) === i).forEach((col) => {
       const b = document.createElement('button'); b.className = 'pastille' + (n.couleur === col ? ' on' : ''); b.style.background = col; b.setAttribute('aria-label', col);
       b.onclick = () => { n.couleur = col; n._rgb = null; n.modifie = Date.now(); sauverNoeud(n); carte.redessiner(); construireAspect(cont, n); };
       c.appendChild(b);
     });
-    cont.appendChild(f); cont.appendChild(c);
+    cont.appendChild(f); cont.appendChild(t); cont.appendChild(c);
   }
 
   /* ---------- création / suppression ---------- */
@@ -320,7 +348,7 @@
   }
   editeur = CE.creer({
     DB, etat, icones: { retour: IC.retour, oeil: IC.oeil, crayon: IC.crayon, plus3: IC.plus3 },
-    modale: { saisie }, toast, palette: () => etat.meta.palette, editerPalette, tousLesTags, menuNoeud,
+    modale: { saisie, lienColle }, parId, creerNoeud: (t, p) => creerNoeud(t, p), toast, palette: () => etat.meta.palette, editerPalette, tousLesTags, menuNoeud,
     sauverNoeud: (n) => { sauverNoeud(n); },
     titreChange: (n) => { carte.redessiner(); },
     ferme: () => { dessinerNotes(); carte.reindexer(); carte.redessiner(); majSelection(parId.get(carte.selection) || null); majRecherchePlace(); },
