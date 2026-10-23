@@ -45,3 +45,14 @@ Stockage : IndexedDB. Fonctionne hors‑ligne après la première ouverture.
 - **Clavier ouvert** : les tags disparaissent et l'en-tête se réduit pour laisser plus de place au texte. Le bouton « œil » passe en lecture sans clavier.
 
 Pour mettre à jour : remplace les fichiers dans ton dépôt, puis ferme et rouvre l'appli deux fois. Tes notes ne bougent pas.
+
+## Nouveautés (v4)
+
+- **Journal** (nouvel onglet) : une page **vierge** par jour, tu y mets ce que tu veux (texte, photos, corrections d'exos, liens…). Calendrier du mois avec un point sur les jours écrits (point bleu = il y a des photos). « Écrire aujourd'hui » ouvre la page du jour. **Aucun rappel, aucune notification.** Un jour que tu ouvres puis refermes sans rien écrire ne laisse aucune trace.
+- **Photos de la pellicule** : bouton 📷 dans la barre d'outils d'une page (plusieurs photos d'un coup). L'appli en garde **sa propre copie** : supprimer la photo de ta galerie ne la supprime pas de Cerveau (elles ne disparaissent que si tu effaces l'icône de l'écran d'accueil ou les données du site, d'où la sauvegarde).
+- **Les jours sont aussi des sommets de la carte** : petits anneaux dorés avec le numéro du jour, rangés par date (un anneau par mois). Dans une page de jour, écris `[[État]]` : le jour est relié à la page « État », et celle-ci affiche « Mentionné dans : Vendredi 23 octobre » en haut. Le bouton 📅 de la carte (ou Réglages) montre/cache les jours.
+- **Orbites** : les enfants d'un sommet (créés avec « + Enfant ») se placent sur un cercle autour de leur parent, tous à la même distance et bien espacés ; si un enfant a lui-même des enfants, le cercle s'agrandit automatiquement pour que les branches ne se chevauchent pas. Si tu déplaces un enfant à la main il reste où tu le poses ; « Sur l'orbite » le remet en place, « Ranger ses enfants » remet tous les enfants d'un sommet, « Tout remettre sur les orbites » (Réglages) fait toute la carte. « Relier à… » reste un simple lien, sans orbite. Interrupteur « Orbites » dans Réglages pour revenir à l'ancienne disposition libre.
+- **Tailles** : 5 (très petit, petit, moyen, grand, très grand). **Couleurs** : 24 couleurs + la pastille arc-en-ciel « + » pour choisir n'importe quelle couleur (elle est ensuite gardée dans ta liste).
+- **Sauvegarde complète** : un seul fichier `.cerveau` avec toutes les pages, tous les liens, les orbites/réglages, le code couleur **et toutes les photos/fichiers**. Bouton « Sauvegarder » dans Journal et dans Réglages (qui affiche la date de la dernière sauvegarde). « Restaurer » remet tout.
+
+Pour mettre à jour : remplace les fichiers dans ton dépôt, puis ferme et rouvre l'appli deux fois. Tes notes et photos ne bougent pas.

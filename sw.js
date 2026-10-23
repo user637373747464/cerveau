@@ -1,5 +1,5 @@
 /* Service worker : l'app s'ouvre même sans réseau (réseau d'abord, copie locale en secours). */
-const VERSION = 'cerveau-v3';
+const VERSION = 'cerveau-v4';
 const FICHIERS = ['./', 'index.html', 'styles.css', 'app.js', 'carte.js', 'editeur.js', 'db.js', 'manifest.webmanifest',
   'vendor/katex/katex.min.js', 'vendor/katex/katex.min.css', 'icons/icon-192.png', 'icons/favicon.svg'];
 self.addEventListener('install', (e) => {

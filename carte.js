@@ -83,10 +83,49 @@
     const etoiles = Array.from({ length: 160 }, () => norm([Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5]).concat([Math.random()]));
     const parId = new Map();
 
-    function reindexer() { parId.clear(); etat.noeuds.forEach((n) => parId.set(n.id, n)); degres(); }
+    const RE_JOUR = /^\d{4}-\d{2}-\d{2}$/;
+    const orbitesOn = () => etat.meta.orbites !== false;
+    const joursVisibles = () => etat.meta.jours !== false;
+    const cache = (n) => n._j && !joursVisibles();            // jour du journal masqué sur la carte
+    let S = { parent: new Map(), enfants: new Map(), ordre: [], racines: [], jours: [], mois: [], Rj: 0 };
+    let phase = 0;
+    function reindexer() { parId.clear(); etat.noeuds.forEach((n) => { parId.set(n.id, n); n._j = !!(n.jour && RE_JOUR.test(n.jour)); }); degres(); structure(); sale = true; }
     function degres() {
       etat.noeuds.forEach((n) => { n._deg = 0; });
       etat.liens.forEach((l) => { const a = parId.get(l.a), b = parId.get(l.b); if (a) a._deg++; if (b) b._deg++; });
+    }
+
+    /* --- structure : parents, enfants (orbites), jours --- */
+    function rayonAnneau(k, mx, rp) {
+      const r = k === 1 ? mx + 3 : Math.max(mx + 2.6, (mx + 0.8) / Math.sin(Math.PI / k));
+      return Math.min(70, Math.max(r, rp + mx + 1.6));
+    }
+    function structure() {
+      const ns = etat.noeuds, par = new Map(), enf = new Map();
+      ns.forEach((n) => enf.set(n.id, []));
+      for (const l of etat.liens) {
+        if (l.t === 'ref') continue;                                     // simple lien d'association : ne crée pas d'orbite
+        const a = parId.get(l.a), b = parId.get(l.b);
+        if (!a || !b || a === b || a._j || b._j || par.has(b.id)) continue;
+        let x = a, cyc = false, g = 0;
+        while (x && g++ < 5000) { if (x === b) { cyc = true; break; } const pid = par.get(x.id); x = pid ? parId.get(pid) : null; }
+        if (cyc) continue;
+        par.set(b.id, a.id); enf.get(a.id).push(b);
+      }
+      const tri = (p, q) => ((p.cree || 0) - (q.cree || 0)) || (p.id < q.id ? -1 : 1);
+      enf.forEach((arr) => arr.sort(tri));
+      const racines = ns.filter((n) => !par.has(n.id) && !n._j).sort(tri);
+      const ordre = racines.slice();
+      for (let i = 0; i < ordre.length; i++) enf.get(ordre[i].id).forEach((c) => ordre.push(c));
+      for (let i = ordre.length - 1; i >= 0; i--) {
+        const p = ordre[i], ch = enf.get(p.id);
+        if (!ch.length) { p._env = rayon(p) + 0.7; continue; }
+        let mx = 0; ch.forEach((c) => { mx = Math.max(mx, c._env || 1); });
+        p._env = rayonAnneau(ch.length, mx, rayon(p)) * 1.3 + mx;
+      }
+      const jours = ns.filter((n) => n._j);
+      const mois = [...new Set(jours.map((n) => n.jour.slice(0, 7)))].sort();
+      S = { parent: par, enfants: enf, ordre, racines, jours, mois, Rj: S.Rj || 0 };
     }
 
     function redim() {
@@ -108,6 +147,7 @@
       base = { pos, f, r, u, foc: Math.min(W, H) * 1.05 + H * 0.15 };
     }
     function projeter(n) {
+      if (cache(n)) { n._vis = false; return; }
       const d = [n.x - base.pos[0], n.y - base.pos[1], n.z - base.pos[2]];
       const Z = dot(d, base.f);
       n._z = Z;
@@ -117,7 +157,7 @@
       n._sy = H / 2 - (base.foc * dot(d, base.u)) / Z;
       n._pr = (base.foc * rayon(n)) / Z;
     }
-    const FACT_TAILLE = [0, 0.62, 1, 1.6];
+    const FACT_TAILLE = [0, 0.62, 1, 1.6, 2.7, 0.36];       // 1 petit · 2 moyen · 3 grand · 4 très grand · 5 très petit
     const rayon = (n) => (0.8 + 0.17 * Math.min(n._deg || 0, 10)) * FACT_TAILLE[n.taille || 2];
 
     function glisser(n, distance) {
@@ -128,7 +168,7 @@
       sale = true;
     }
     function ajustement() {                 // centre et distance qui montrent tout le graphe
-      const ns = etat.noeuds;
+      const ns = etat.noeuds.filter((n) => !cache(n));
       if (!ns.length) return { c: [0, 0, 0], d: 14 };
       const c = [0, 0, 0]; ns.forEach((n) => { c[0] += n.x; c[1] += n.y; c[2] += n.z; });
       c[0] /= ns.length; c[1] /= ns.length; c[2] /= ns.length;
@@ -143,9 +183,8 @@
     }
 
     /* --- disposition « aimants » en 3D --- */
-    function simuler() {
+    function simulerLibre() {                    // ancienne disposition : tous les sommets s'écartent et se tirent par les liens
       const ns = etat.noeuds, N = ns.length;
-      if (alpha < 0.004 || !N) { if (alpha > 0) { alpha = 0; cb.positionsStables && cb.positionsStables(); } return; }
       const rep = 9.0 * alpha, ressort = 0.07 * alpha, L = 5;
       for (const n of ns) { n._fx = 0; n._fy = 0; n._fz = 0; }
       for (let i = 0; i < N; i++) {
@@ -168,6 +207,9 @@
         const f = (d - L) * ressort, fx = (dx / d) * f, fy = (dy / d) * f, fz = (dz / d) * f;
         a._fx += fx; a._fy += fy; a._fz += fz; b._fx -= fx; b._fy -= fy; b._fz -= fz;
       }
+      integrer(ns);
+    }
+    function integrer(ns) {
       for (const n of ns) {
         n._fx -= n.x * 0.012 * alpha; n._fy -= n.y * 0.012 * alpha; n._fz -= n.z * 0.012 * alpha;
         if (n.fixe || n._tenu) { n._vx = n._vy = n._vz = 0; continue; }
@@ -176,8 +218,97 @@
         if (v > m) { n._vx *= m / v; n._vy *= m / v; n._vz *= m / v; }
         n.x += n._vx; n.y += n._vy; n.z += n._vz;
       }
-      alpha *= 0.985;
-      sale = true;
+    }
+    function simulerRacines() {                  // mode orbites : seules les « racines » (sommets sans parent) s'organisent entre elles
+      const rs = S.racines, N = rs.length;
+      for (const n of rs) { n._fx = 0; n._fy = 0; n._fz = 0; }
+      for (let i = 0; i < N; i++) {
+        const a = rs[i];
+        for (let j = i + 1; j < N; j++) {
+          const b = rs[j];
+          let dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+          let d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 < 0.01) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; dz = Math.random() - 0.5; d2 = 0.3; }
+          const d = Math.sqrt(d2), sep = (a._env || 1) + (b._env || 1) + 2.5;
+          let f = (9.0 * alpha * (1 + sep * 0.15)) / d2;
+          if (d < sep) f += (sep - d) * 0.09 * alpha;
+          if (d2 > 2500 && d >= sep) continue;
+          const fx = (dx / d) * f, fy = (dy / d) * f, fz = (dz / d) * f;
+          a._fx += fx; a._fy += fy; a._fz += fz; b._fx -= fx; b._fy -= fy; b._fz -= fz;
+        }
+      }
+      for (const l of etat.liens) {               // liens d'association entre racines : léger rapprochement
+        const a = parId.get(l.a), b = parId.get(l.b);
+        if (!a || !b || S.parent.has(a.id) || S.parent.has(b.id) || a._j || b._j) continue;
+        const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, d = Math.hypot(dx, dy, dz) || 0.01;
+        const L = (a._env || 1) + (b._env || 1) + 3;
+        const f = (d - L) * 0.05 * alpha, fx = (dx / d) * f, fy = (dy / d) * f, fz = (dz / d) * f;
+        a._fx += fx; a._fy += fy; a._fz += fz; b._fx -= fx; b._fy -= fy; b._fz -= fz;
+      }
+      integrer(rs);
+    }
+    const AXE_RACINE = norm([0.16, 1, 0.1]);
+    function anneauDe(p, orb) {                  // repère du cercle des enfants de p : centre, axe, deux vecteurs, rayon
+      let axe = AXE_RACINE, decal = 0;
+      const gp = S.parent.has(p.id) ? parId.get(S.parent.get(p.id)) : null;
+      if (gp) { axe = norm([p.x - gp.x, p.y - gp.y, p.z - gp.z]); }
+      let mx = 0; orb.forEach((c) => { mx = Math.max(mx, c._env || 1); });
+      const R = rayonAnneau(orb.length, mx, rayon(p));
+      if (gp) decal = R * 0.3;
+      const u = Math.abs(axe[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+      const e1 = norm(cross(axe, u)), e2 = cross(axe, e1);
+      return { c: [p.x + axe[0] * decal, p.y + axe[1] * decal, p.z + axe[2] * decal], e1, e2, R };
+    }
+    const hach = (id) => { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 6283; return h / 1000; };
+    function placerOrbites(dt) {                 // les enfants glissent vers leur place sur l'anneau de leur parent ; les jours vers leur mois
+      let bouge = false;
+      const tourne = etat.meta.animer !== false;
+      if (tourne) phase += dt * 0.00005;
+      const vers = (n, tx, ty, tz, k) => {
+        const dx = tx - n.x, dy = ty - n.y, dz = tz - n.z, d = Math.hypot(dx, dy, dz);
+        if (d < 0.004) return;
+        if (d < 0.02) { n.x = tx; n.y = ty; n.z = tz; bouge = true; return; }
+        n.x += dx * k; n.y += dy * k; n.z += dz * k; bouge = true;
+      };
+      for (const p of S.ordre) {
+        const ch = S.enfants.get(p.id);
+        if (!ch.length) { p._anneau = null; continue; }
+        const orb = ch.filter((c) => !c.fixe && !c._tenu);
+        if (!orb.length) { p._anneau = null; continue; }
+        const an = anneauDe(p, orb); p._anneau = an;
+        const ph = (p._ph = p._ph === undefined ? hach(p.id) : p._ph) + phase;
+        orb.forEach((c, i) => {
+          const th = (2 * Math.PI * i) / orb.length + ph, ct = Math.cos(th) * an.R, st = Math.sin(th) * an.R;
+          vers(c, an.c[0] + an.e1[0] * ct + an.e2[0] * st, an.c[1] + an.e1[1] * ct + an.e2[1] * st, an.c[2] + an.e1[2] * ct + an.e2[2] * st, 0.14);
+        });
+      }
+      // jours : un anneau par mois, rangés par date (le mois le plus récent à hauteur de la carte)
+      if (S.jours.length) {
+        let ext = 0; S.racines.forEach((r) => { ext = Math.max(ext, Math.hypot(r.x, r.z) + (r._env || 1)); });
+        const Rj = Math.max(11, ext + 3.5);
+        S.Rj = S.Rj ? S.Rj + (Rj - S.Rj) * 0.08 : Rj;
+        const dernier = S.mois.length - 1;
+        for (const n of S.jours) {
+          if (n.fixe || n._tenu) continue;
+          const mi = S.mois.indexOf(n.jour.slice(0, 7)), j = +n.jour.slice(8, 10);
+          const th = -Math.PI / 2 + (2 * Math.PI * (j - 1)) / 31;
+          vers(n, Math.cos(th) * S.Rj, (mi - dernier) * 4.4, Math.sin(th) * S.Rj, 0.1);
+        }
+      }
+      return bouge;
+    }
+    let sauvePos = false;
+    function simuler(dt) {
+      if (!etat.noeuds.length) return;
+      const orb = orbitesOn(), tourne = orb && etat.meta.animer !== false;
+      if (alpha >= 0.004) {
+        if (orb) simulerRacines(); else simulerLibre();
+        alpha *= 0.985; sale = true; sauvePos = true;
+      } else if (alpha > 0) alpha = 0;
+      let b = false;
+      if (orb) b = placerOrbites(dt || 33); else S.ordre.forEach((p) => { p._anneau = null; });
+      if (b) { sale = true; if (!tourne) sauvePos = true; }
+      if (sauvePos && alpha === 0 && (!b || tourne)) { sauvePos = false; cb.positionsStables && cb.positionsStables(); }
     }
     function reveiller(force) { alpha = Math.max(alpha, force || 1); }
 
@@ -206,6 +337,33 @@
       if (sel) etat.liens.forEach((l) => { if (l.a === sel.id) voisins.add(l.b); else if (l.b === sel.id) voisins.add(l.a); });
       const att = (n) => (filtre && !filtre.has(n.id) ? 0.2 : 1);
 
+      // anneaux d'orbite (très discrets) : un par parent, un par mois de journal
+      if (orbitesOn()) {
+        ctx.lineWidth = 1; ctx.lineCap = 'round';
+        const pp = (x, y, z) => { const d = [x - base.pos[0], y - base.pos[1], z - base.pos[2]], Z = dot(d, base.f); return Z < 0.4 ? null : [W / 2 + (base.foc * dot(d, base.r)) / Z, H / 2 - (base.foc * dot(d, base.u)) / Z]; };
+        const cercle = (c, e1, e2, R, col) => {
+          ctx.strokeStyle = col; ctx.beginPath();
+          let go = false;
+          for (let i = 0; i <= 56; i++) {
+            const th = (i / 56) * 6.2832, ct = Math.cos(th) * R, st = Math.sin(th) * R;
+            const q = pp(c[0] + e1[0] * ct + e2[0] * st, c[1] + e1[1] * ct + e2[1] * st, c[2] + e1[2] * ct + e2[2] * st);
+            if (!q) { go = false; continue; }
+            if (go) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]);
+            go = true;
+          }
+          ctx.stroke();
+        };
+        for (const p of S.ordre) {
+          const an = p._anneau;
+          if (!an || cache(p) || !p._vis) continue;
+          const fort = sel && (p.id === sel.id || (S.parent.get(sel.id) === p.id));
+          cercle(an.c, an.e1, an.e2, an.R, fort ? 'rgba(170,190,255,0.34)' : 'rgba(140,160,230,0.12)');
+        }
+        if (joursVisibles() && S.jours.length && S.Rj) {
+          const dernier = S.mois.length - 1;
+          S.mois.forEach((m, mi) => cercle([0, (mi - dernier) * 4.4, 0], [1, 0, 0], [0, 0, 1], S.Rj, 'rgba(255,209,102,0.11)'));
+        }
+      }
       // arêtes
       ctx.lineCap = 'round';
       for (const l of etat.liens) {
@@ -238,7 +396,14 @@
         ctx.globalAlpha = al;
         const r = n._pr;
         const forme = FORMES[n.forme];
-        if (r < 3.5 || !forme) {
+        if (n._j) {                                   // jour du journal : un anneau avec le numéro du jour
+          const rr = Math.max(r, 3.2);
+          ctx.fillStyle = 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',0.16)'; ctx.beginPath(); ctx.arc(n._sx, n._sy, rr, 0, 6.2832); ctx.fill();
+          ctx.strokeStyle = 'rgb(' + Math.min(255, c[0] + 25) + ',' + Math.min(255, c[1] + 25) + ',' + Math.min(255, c[2] + 25) + ')'; ctx.lineWidth = Math.max(1.6, rr * 0.2);
+          ctx.beginPath(); ctx.arc(n._sx, n._sy, rr, 0, 6.2832); ctx.stroke();
+          if (rr >= 9) { ctx.fillStyle = '#fff'; ctx.font = '800 ' + Math.round(rr * 0.9) + 'px -apple-system, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(+n.jour.slice(8, 10)), n._sx, n._sy + 0.5); }
+          else { ctx.fillStyle = 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')'; ctx.beginPath(); ctx.arc(n._sx, n._sy, rr * 0.3, 0, 6.2832); ctx.fill(); }
+        } else if (r < 3.5 || !forme) {
           const g = ctx.createRadialGradient(n._sx - r * 0.35, n._sy - r * 0.4, r * 0.1, n._sx, n._sy, r);
           g.addColorStop(0, 'rgb(' + Math.min(255, c[0] + 90) + ',' + Math.min(255, c[1] + 90) + ',' + Math.min(255, c[2] + 90) + ')');
           g.addColorStop(1, 'rgb(' + (c[0] * 0.45 | 0) + ',' + (c[1] * 0.45 | 0) + ',' + (c[2] * 0.45 | 0) + ')');
@@ -289,7 +454,7 @@
         const taille = borne(11 + n._pr * 0.12, 11, 15);
         const a = (filtre && !filtre.has(n.id) ? 0.25 : 1) * borne(1.5 - n._z / (cam.dist * 3), 0.35, 1);
         ctx.font = (importante ? '700 ' : '600 ') + taille.toFixed(0) + 'px -apple-system, system-ui, sans-serif';
-        const t = (n.titre || 'Sans titre').slice(0, 26);
+        const t = (n._j ? (n.titre || n.jour).replace(/\s*20\d\d$/, '') : (n.titre || 'Sans titre')).slice(0, 26);
         const y = n._sy + Math.max(n._pr, 3) * 1.45 + 5;
         ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(0,0,0,' + (0.85 * a).toFixed(2) + ')'; ctx.strokeText(t, n._sx, y);
         ctx.fillStyle = 'rgba(255,255,255,' + a.toFixed(2) + ')'; ctx.fillText(t, n._sx, y);
@@ -313,7 +478,7 @@
         if (anim.t >= 1) anim = null;
         sale = true;
       }
-      if (alpha > 0) simuler();
+      simuler(dt);
       if (auto && !anim && etat.noeuds.length && (alpha > 0 || temps - dernierAuto < 1500)) {
         const a = ajustement();
         for (let k = 0; k < 3; k++) cam.cible[k] += (a.c[k] - cam.cible[k]) * 0.08;
@@ -431,6 +596,9 @@
       definirFiltre(f) { filtre = f; sale = true; },
       activer(b) { actif = b; if (b) { redim(); sale = true; } },
       redessiner() { sale = true; },
+      parentDe(n) { const p = S.parent.get(n.id); return p ? parId.get(p) : null; },
+      enfantsDe(n) { return (S.enfants.get(n.id) || []).slice(); },
+      get nbJours() { return S.jours.length; },
       camera: cam,
       placerNouveau(n, parent) {          // place un nouveau sommet près de son parent (ou de la cible de la caméra)
         const o = parent ? [parent.x, parent.y, parent.z] : cam.cible.slice();

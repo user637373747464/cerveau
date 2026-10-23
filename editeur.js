@@ -42,7 +42,7 @@
 
   function creer(ctx) {
     const $ = (id) => document.getElementById(id);
-    const ed = $('editeur'), corps = $('ed-corps'), titre = $('ed-titre'), tagsBox = $('ed-tags'), barre = $('ed-barre'), outils = $('ed-outils'), pop = $('ed-pop'), menu = $('ed-menu'), fpj = $('f-pj'), vis = $('visionneuse');
+    const ed = $('editeur'), corps = $('ed-corps'), titre = $('ed-titre'), tagsBox = $('ed-tags'), barre = $('ed-barre'), outils = $('ed-outils'), pop = $('ed-pop'), menu = $('ed-menu'), fpj = $('f-pj'), fph = $('f-photo'), vis = $('visionneuse');
     let n = null, mode = 'ecrire', ouvert = false;
     const urls = new Map();
     let minuteur = null;
@@ -229,6 +229,7 @@
     function poserWiki(t, m, cible, q) {
       let c = cible;
       if (!c) { c = ctx.creerNoeud(q, n); ctx.toast('Page « ' + q.slice(0, 24) + ' » créée et reliée'); }
+      else if (ctx.lierRef) ctx.lierRef(n, c);
       const r = document.createRange(); r.setStart(t.nd, t.off - m[0].length); r.setEnd(t.nd, t.off);
       const s = getSelection(); s.removeAllRanges(); s.addRange(r);
       document.execCommand('insertHTML', false, wikiHtml(c) + '&nbsp;');
@@ -245,7 +246,7 @@
       m = /\[\[([^\[\]]*)$/.exec(t.txt);
       if (!m) return fermerWiki();
       const q = m[1], nq = norm(q);
-      let liste = ctx.etat.noeuds.filter((x) => x !== n && (!nq || norm(nomDe(x)).includes(nq)));
+      let liste = ctx.etat.noeuds.filter((x) => x !== n && (nq ? norm(nomDe(x)).includes(nq) : !x.jour));
       liste.sort((a, b) => (norm(nomDe(b)).startsWith(nq) ? 1 : 0) - (norm(nomDe(a)).startsWith(nq) ? 1 : 0) || nomDe(a).localeCompare(nomDe(b), 'fr'));
       liste = liste.slice(0, 20);
       wikiBox.innerHTML = '';
@@ -348,6 +349,7 @@
       { h: '❝', f: () => cmd('formatBlock', '<blockquote>'), l: 'Citation' },
       { sep: 1 },
       { h: '🔗', f: boutonLien, l: 'Lien' },
+      { h: '📷', f: () => { if (document.activeElement !== corps) restaurerSel(); poserRepere(); fph.value = ''; fph.click(); }, l: 'Photos de la pellicule' },
       { h: '📎', f: () => { if (document.activeElement !== corps) restaurerSel(); poserRepere(); fpj.value = ''; fpj.click(); }, l: 'Photo, vidéo, PDF…' },
       { h: '∑', f: boutonFormule, l: 'Formule $$…$$' },
       { sep: 1 },
@@ -365,6 +367,7 @@
     });
     ['mousedown', 'pointerdown'].forEach((ev) => barre.addEventListener(ev, (e) => { e.preventDefault(); }));
     fpj.addEventListener('change', () => { const l = [...fpj.files]; fpj.value = ''; if (l.length) ajouterFichiers(l); });
+    fph.addEventListener('change', () => { const l = [...fph.files]; fph.value = ''; if (l.length) ajouterFichiers(l); });
 
     /* ---------- mode lecture / écriture ---------- */
     function icones() {
@@ -386,6 +389,24 @@
       corps.contentEditable = 'true'; corps.classList.remove('lecture'); barre.classList.remove('cache');
       corps.innerHTML = n.html || ''; resoudreWiki(corps); hydrater(corps); base = serialiser(); icones();
       if (focus) { corps.focus(); placerFin(corps); }
+    }
+
+    /* ---------- « Mentionné dans » : les pages qui parlent de celle-ci ---------- */
+    const retro = $('ed-retro');
+    function dessinerRetro() {
+      retro.innerHTML = '';
+      if (!n) { retro.classList.add('cache'); return; }
+      const cle = 'data-n="' + n.id + '"';
+      const lst = ctx.etat.noeuds.filter((x) => x !== n && (x.html || '').includes(cle)).sort((a, b) => (b.jour || '').localeCompare(a.jour || '') || b.modifie - a.modifie);
+      if (!lst.length) { retro.classList.add('cache'); return; }
+      retro.classList.remove('cache');
+      const t = document.createElement('span'); t.className = 'r-t'; t.textContent = 'Mentionné dans'; retro.appendChild(t);
+      lst.forEach((x) => {
+        const b = document.createElement('button'); b.className = 'r-chip' + (x.jour ? ' jour' : '');
+        b.textContent = x.jour ? nomDe(x).replace(/\s*20\d\d$/, '') : nomDe(x);
+        b.addEventListener('click', () => allerWiki(x.id));
+        retro.appendChild(b);
+      });
     }
 
     /* ---------- étiquettes (tags) ---------- */
@@ -501,7 +522,7 @@
       titre.value = n.titre && n.titre !== 'Sans titre' ? n.titre : (n.titre || '');
       menu.classList.add('cache'); fermerPop(); vis.classList.add('cache');
       $('ed-retour').innerHTML = ctx.icones.retour; $('ed-plus').innerHTML = ctx.icones.plus3;
-      dessinerTags();
+      dessinerTags(); dessinerRetro();
       ed.classList.remove('cache');
       ajuster();
       const modeVoulu = (options && options.mode) || (n.html ? 'lire' : 'ecrire');

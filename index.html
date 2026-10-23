@@ -25,6 +25,7 @@
 
     <div class="haut">
       <button class="rond verre" id="b-loupe" aria-label="Rechercher"></button>
+      <button class="rond verre" id="b-jours" aria-label="Montrer ou cacher les jours du journal"></button>
       <div class="espace"></div>
       <button class="rond verre" id="b-centrer" aria-label="Tout voir"></button>
       <button class="rond blanc" id="b-plus" aria-label="Nouveau sommet"></button>
@@ -51,9 +52,33 @@
         <button class="act" data-a="relier">Relier à…</button>
         <button class="act" data-a="aspect">Aspect</button>
         <button class="act" data-a="epingle">Fixer</button>
+        <button class="act cache" data-a="ranger">Ranger ses enfants</button>
         <button class="act danger" data-a="suppr">Supprimer</button>
       </div>
       <div id="cs-aspect" class="cs-aspect cache"></div>
+    </div>
+  </section>
+
+  <!-- ============ JOURNAL ============ -->
+  <section id="vue-journal" class="vue">
+    <div class="page">
+      <div class="j-tete">
+        <h1>Journal</h1>
+        <button class="act" id="j-sauve">Sauvegarder</button>
+      </div>
+      <p class="aide" id="j-stats"></p>
+      <button class="act plein gros" id="j-auj">Écrire aujourd'hui</button>
+      <div class="cal-nav">
+        <button class="rond verre" id="j-prec" aria-label="Mois précédent"></button>
+        <b id="j-mois"></b>
+        <button class="rond verre" id="j-suiv" aria-label="Mois suivant"></button>
+      </div>
+      <div class="cal-sem"><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+      <div id="j-grille" class="cal-grille"></div>
+      <div class="cal-legende"><span><i class="d"></i>page écrite</span><span><i class="d p"></i>avec photos</span></div>
+      <h2 id="j-liste-titre"></h2>
+      <div id="j-liste" class="liste-notes"></div>
+      <p class="aide centre">Chaque jour est une page vierge, à toi d'en faire ce que tu veux.<br>Pas de rappel, pas de notification.</p>
     </div>
   </section>
 
@@ -82,7 +107,9 @@
         <h2>Comment ça marche</h2>
         <p class="aide" style="margin:0">
           <b>Carte</b> : un doigt tourne la carte, deux doigts zooment et la déplacent. Touche un sommet pour le choisir, touche-le deux fois pour ouvrir sa note. Quand il est choisi, glisse-le pour le placer où tu veux (il reste alors fixe).<br><br>
-          <b>Note</b> : l'œil en haut passe en lecture (formules, cases à cocher). Écris une formule entre <b>$$ … $$</b>, puis touche l'œil pour la voir. Le bouton ☐ fait une case à cocher, 📎 ajoute photo, vidéo ou PDF, 🔗 un lien (YouTube : une vignette cliquable).
+          <b>Orbites</b> : un sommet créé avec « + Enfant » se met en orbite autour de son parent. Glisse-le où tu veux : il reste là. « Sur l'orbite » le remet à sa place.<br><br>
+          <b>Journal</b> : un onglet à part, une page vierge par jour. Dans une page, écris <b>[[</b> pour la relier à un autre sommet (par exemple « L'État ») : le jour apparaît alors dans « Mentionné dans » de cette page.<br><br>
+          <b>Note</b> : l'œil en haut passe en lecture (formules, cases à cocher). Écris une formule entre <b>$$ … $$</b>, puis touche l'œil pour la voir. Le bouton ☐ fait une case à cocher, 📷 ajoute des photos de ta pellicule, 📎 une vidéo, un PDF ou un fichier, 🔗 un lien (YouTube : une vignette cliquable).
         </p>
       </div>
 
@@ -95,13 +122,17 @@
 
       <div class="bloc">
         <h2>Carte</h2>
-        <button class="interrupteur" id="r-anim" role="switch" aria-checked="true"><span>Animation douce<small>Étoiles et sommets qui tournent lentement. Désactive pour économiser la batterie.</small></span><i class="sw on"></i></button>
+        <button class="interrupteur" id="r-anim" role="switch" aria-checked="true"><span>Animation douce<small>Étoiles, sommets et orbites qui tournent lentement. Désactive pour économiser la batterie.</small></span><i class="sw on"></i></button>
+        <button class="interrupteur" id="r-orb" role="switch" aria-checked="true" style="margin-top:14px"><span>Orbites<small>Les enfants d'un sommet tournent autour de lui, bien espacés. Tu peux toujours en déplacer un à la main.</small></span><i class="sw on"></i></button>
+        <button class="interrupteur" id="r-jours" role="switch" aria-checked="true" style="margin-top:14px"><span>Jours du journal sur la carte<small>Chaque jour écrit devient un petit anneau, rangé par date. Le bouton 📅 de la carte les cache aussi.</small></span><i class="sw on"></i></button>
+        <div class="rangee"><button class="act" id="r-ranger">Tout remettre sur les orbites</button></div>
       </div>
 
       <div class="bloc">
         <h2>Sauvegarde</h2>
-        <p class="aide">Tout est gardé dans ton iPhone, rien n'est envoyé sur Internet. Fais une sauvegarde de temps en temps : si Safari vide ses données ou si tu changes de téléphone, c'est ta seule copie.</p>
+        <p class="aide">Tout est gardé dans ton iPhone, rien n'est envoyé sur Internet. Le fichier de sauvegarde contient <b>toutes tes pages, tes liens, tes couleurs et toutes tes photos</b> en une seule fois. Fais-en une de temps en temps : si Safari vide ses données ou si tu changes de téléphone, c'est ta seule copie. Supprimer une photo de ta galerie ne la supprime pas de Cerveau : l'appli garde sa propre copie.</p>
         <div id="r-stock" class="aide"></div>
+        <div id="r-derniere" class="aide"></div>
         <div class="rangee">
           <button class="act plein" id="r-export">Sauvegarder</button>
           <button class="act" id="r-import">Restaurer</button>
@@ -116,13 +147,14 @@
           <button class="act danger" id="r-efface">Tout effacer</button>
         </div>
       </div>
-      <p class="aide centre">Cerveau · version 1</p>
+      <p class="aide centre">Cerveau · version 4</p>
     </div>
   </section>
 
   <!-- ============ ONGLETS ============ -->
   <nav id="onglets">
     <button data-v="carte" class="actif"><i id="ic-carte"></i><span>Carte</span></button>
+    <button data-v="journal"><i id="ic-journal"></i><span>Journal</span></button>
     <button data-v="notes"><i id="ic-notes"></i><span>Notes</span></button>
     <button data-v="reglages"><i id="ic-reglages"></i><span>Réglages</span></button>
   </nav>
@@ -136,6 +168,7 @@
       <button class="rond verre" id="ed-plus" aria-label="Plus"></button>
     </header>
     <div id="ed-tags" class="ed-tags"></div>
+    <div id="ed-retro" class="ed-retro cache"></div>
     <div id="ed-corps" class="corps" contenteditable="true" spellcheck="true" lang="fr" autocapitalize="sentences"></div>
     <div id="ed-menu" class="menu-flottant cache"></div>
     <div id="ed-wiki" class="wiki-pop cache"></div>
@@ -144,6 +177,7 @@
       <div class="defile" id="ed-outils"></div>
     </div>
     <input id="f-pj" type="file" class="cache" multiple>
+    <input id="f-photo" type="file" class="cache" multiple accept="image/*,video/*">
   </section>
 
   <div id="visionneuse" class="visionneuse cache"></div>

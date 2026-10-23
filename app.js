@@ -17,18 +17,24 @@
     plus3: svg('<circle cx="5" cy="12" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="19" cy="12" r="1.2" fill="currentColor"/>', ' stroke-width="2.4"'),
     carte: svg('<circle cx="6" cy="7" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M8 8l8-1.2M7.2 9.2l3.6 6.8M16.8 8.2L13.2 16"/>'),
     notes: svg('<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/>'),
+    journal: svg('<path d="M5 4h11a3 3 0 013 3v13H8a3 3 0 01-3-3z"/><path d="M5 17a3 3 0 013-3h11M9 8h6"/>'),
+    jours: svg('<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/><circle cx="12" cy="15" r="1.3" fill="currentColor"/>'),
+    gauche: svg('<path d="M15 5l-7 7 7 7"/>', ' stroke-width="2.4"'),
+    droite: svg('<path d="M9 5l7 7-7 7"/>', ' stroke-width="2.4"'),
     reglages: svg('<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>'),
   };
   $('b-loupe').innerHTML = IC.loupe; $('b-centrer').innerHTML = IC.centrer; $('b-plus').innerHTML = IC.plus;
-  $('ic-carte').innerHTML = IC.carte; $('ic-notes').innerHTML = IC.notes; $('ic-reglages').innerHTML = IC.reglages;
+  $('b-jours').innerHTML = IC.jours; $('j-prec').innerHTML = IC.gauche; $('j-suiv').innerHTML = IC.droite; $('ic-journal').innerHTML = IC.journal; $('ic-carte').innerHTML = IC.carte; $('ic-notes').innerHTML = IC.notes; $('ic-reglages').innerHTML = IC.reglages;
 
   /* ---------- données ---------- */
   const PALETTE_DEFAUT = [
     { c: '#5b9bff', nom: 'Définition' }, { c: '#ff5b5b', nom: 'Important' }, { c: '#43d68c', nom: 'Exemple' },
     { c: '#ffd23f', nom: 'À revoir' }, { c: '#b47cff', nom: 'Idée' }, { c: '#ff9a4d', nom: 'Question' },
   ];
-  const COULEURS_NOEUD = ['#e8e8ee', '#6ea8ff', '#ff6b6b', '#5ee0a0', '#ffd166', '#c084fc', '#ff9f5a', '#4fd8e8'];
-  const etat = { noeuds: [], liens: [], meta: { palette: PALETTE_DEFAUT.map((p) => ({ ...p })), animer: true } };
+  const COULEURS_NOEUD = ['#e8e8ee', '#ffffff', '#9a9aa5', '#ff6b6b', '#ff4d6d', '#ff9f5a', '#ffb703', '#ffd166', '#f4ee6b', '#b8e65a', '#5ee0a0', '#2fbf71',
+    '#4fd8e8', '#38bdf8', '#6ea8ff', '#4361ee', '#8b7bff', '#c084fc', '#e879f9', '#ff7eb6', '#d4a373', '#8d6e63', '#5fa8a0', '#2a9d8f'];
+  const COULEUR_JOUR = '#ffd166';
+  const etat = { noeuds: [], liens: [], meta: { palette: PALETTE_DEFAUT.map((p) => ({ ...p })), animer: true, orbites: true, jours: true, couleursPerso: [], derniereSauvegarde: null } };
   const parId = new Map();
   let carte = null, editeur = null, vueCourante = 'carte', modeLien = false;
   const dateFr = (t, o) => new Date(t).toLocaleDateString('fr-FR', o || { day: 'numeric', month: 'short' });
@@ -37,7 +43,7 @@
   function pur(n) { return { id: n.id, titre: n.titre, html: n.html, texte: n.texte, tags: n.tags, x: n.x, y: n.y, z: n.z, forme: n.forme, couleur: n.couleur, taille: n.taille || 2, fixe: !!n.fixe, jour: n.jour || null, cree: n.cree, modifie: n.modifie }; }
   function completer(n) {
     return { id: n.id || nouvelId(), titre: n.titre || '', html: n.html || '', texte: n.texte || '', tags: Array.isArray(n.tags) ? n.tags : [], x: +n.x || 0, y: +n.y || 0, z: +n.z || 0,
-      forme: n.forme || 'sphere', couleur: n.couleur || COULEURS_NOEUD[0], taille: [1, 2, 3].includes(+n.taille) ? +n.taille : 2, fixe: !!n.fixe, jour: n.jour || null, cree: n.cree || Date.now(), modifie: n.modifie || Date.now() };
+      forme: n.forme || 'sphere', couleur: n.couleur || COULEURS_NOEUD[0], taille: [1, 2, 3, 4, 5].includes(+n.taille) ? +n.taille : 2, fixe: !!n.fixe, jour: n.jour || null, cree: n.cree || Date.now(), modifie: n.modifie || Date.now() };
   }
   function indexer() { parId.clear(); etat.noeuds.forEach((n) => parId.set(n.id, n)); carte && carte.reindexer(); }
 
@@ -51,7 +57,8 @@
     try { await DB.mettre('noeuds', objs); } catch (e) { toast("Impossible d'enregistrer (mémoire pleine ?)"); }
   }
   function sauverPositions() { etat.noeuds.forEach((n) => file.add(n.id)); clearTimeout(tFlush); tFlush = setTimeout(flush, 600); }
-  function sauverMeta() { DB.mettre('meta', [{ cle: 'palette', valeur: etat.meta.palette }, { cle: 'animer', valeur: etat.meta.animer }]).catch(() => {}); }
+  const CLES_META = ['palette', 'animer', 'orbites', 'jours', 'couleursPerso', 'derniereSauvegarde'];
+  function sauverMeta() { DB.mettre('meta', CLES_META.map((cle) => ({ cle, valeur: etat.meta[cle] }))).catch(() => {}); }
   document.addEventListener('visibilitychange', () => { if (document.hidden) { editeur && editeur.sauverMaintenant(); flush(); } });
   addEventListener('pagehide', () => { editeur && editeur.sauverMaintenant(); flush(); });
 
@@ -154,15 +161,28 @@
       f.appendChild(b);
     });
     const t = document.createElement('div'); t.className = 'tailles';
-    [[1, 'Petit', 10], [2, 'Moyen', 16], [3, 'Grand', 24]].forEach(([v, nom, d]) => {
+    [[5, 'Très petit', 7], [1, 'Petit', 11], [2, 'Moyen', 16], [3, 'Grand', 22], [4, 'Très grand', 30]].forEach(([v, nom, d]) => {
       const b = document.createElement('button'); b.className = 'taille' + ((n.taille || 2) === v ? ' on' : ''); b.innerHTML = '<i style="width:' + d + 'px;height:' + d + 'px"></i>' + nom;
-      b.onclick = () => { n.taille = v; n.modifie = Date.now(); sauverNoeud(n); carte.redessiner(); construireAspect(cont, n); };
+      b.onclick = () => { n.taille = v; n.modifie = Date.now(); sauverNoeud(n); carte.reindexer(); carte.reveiller(0.5); carte.redessiner(); construireAspect(cont, n); };
       t.appendChild(b);
     });
     const c = document.createElement('div'); c.className = 'couleurs';
-    COULEURS_NOEUD.concat(etat.meta.palette.map((p) => p.c)).filter((x, i, a) => a.indexOf(x) === i).forEach((col) => {
-      const b = document.createElement('button'); b.className = 'pastille' + (n.couleur === col ? ' on' : ''); b.style.background = col; b.setAttribute('aria-label', col);
-      b.onclick = () => { n.couleur = col; n._rgb = null; n.modifie = Date.now(); sauverNoeud(n); carte.redessiner(); construireAspect(cont, n); };
+    const choisirCouleur = (col) => { n.couleur = col; n._rgb = null; n.modifie = Date.now(); sauverNoeud(n); carte.redessiner(); };
+    const toutes = COULEURS_NOEUD.concat(etat.meta.couleursPerso || [], etat.meta.palette.map((p) => p.c)).map((x) => x.toLowerCase());
+    // couleur sur mesure : le sélecteur de couleurs d'iOS (roue, curseurs, pipette)
+    const perso = document.createElement('label'); perso.className = 'pastille perso'; perso.setAttribute('aria-label', 'Autre couleur');
+    const inp = document.createElement('input'); inp.type = 'color'; inp.value = /^#[0-9a-f]{6}$/i.test(n.couleur || '') ? n.couleur : '#ffffff';
+    inp.oninput = () => choisirCouleur(inp.value);
+    inp.onchange = () => {
+      const col = inp.value.toLowerCase();
+      if (!toutes.includes(col)) { etat.meta.couleursPerso = [col].concat(etat.meta.couleursPerso || []).slice(0, 14); sauverMeta(); }
+      choisirCouleur(col); construireAspect(cont, n);
+    };
+    perso.appendChild(inp);
+    c.appendChild(perso);
+    toutes.filter((x, i, a) => a.indexOf(x) === i).forEach((col) => {
+      const b = document.createElement('button'); b.className = 'pastille' + ((n.couleur || '').toLowerCase() === col ? ' on' : ''); b.style.background = col; b.setAttribute('aria-label', col);
+      b.onclick = () => { choisirCouleur(col); construireAspect(cont, n); };
       c.appendChild(b);
     });
     cont.appendChild(f); cont.appendChild(t); cont.appendChild(c);
@@ -205,6 +225,13 @@
   }
 
   /* ---------- carte : sommet choisi ---------- */
+  const surOrbite = (n) => !!(n._j || carte.parentDe(n));
+  const libelleEpingle = (n) => (n.fixe ? (surOrbite(n) ? (n._j ? 'Sur son anneau' : "Sur l'orbite") : 'Libérer') : 'Fixer');
+  function basculerEpingle(n) {
+    if (n.fixe && surOrbite(n)) { n.fixe = false; toast(n._j ? 'Le jour est revenu sur son anneau' : "Remis sur l'orbite"); }
+    else { n.fixe = !n.fixe; toast(n.fixe ? 'Sommet fixé : il ne bouge plus' : 'Sommet libéré'); }
+    sauverNoeud(n); carte.reindexer(); carte.reveiller(0.7);
+  }
   function majSelection(n) {
     const box = $('carte-sel');
     if (!n) { box.classList.add('cache'); return; }
@@ -213,7 +240,10 @@
     $('cs-nom').textContent = n.titre || 'Sans titre';
     const deg = etat.liens.filter((l) => l.a === n.id || l.b === n.id).length;
     $('cs-info').textContent = deg + (deg > 1 ? ' liens' : ' lien') + (n.tags.length ? ' · ' + n.tags.map((t) => '#' + t).join(' ') : '');
-    box.querySelector('[data-a=epingle]').textContent = n.fixe ? 'Libérer' : 'Fixer';
+    box.querySelector('[data-a=epingle]').textContent = libelleEpingle(n);
+    const pinnes = carte.enfantsDe(n).filter((c) => c.fixe).length;
+    const bo = box.querySelector('[data-a=ranger]'); bo.classList.toggle('cache', !pinnes);
+    bo.textContent = pinnes > 1 ? 'Ranger ses enfants' : 'Ranger son enfant';
     $('cs-aspect').classList.add('cache');
   }
   $('carte-sel').addEventListener('click', async (e) => {
@@ -235,7 +265,8 @@
     } else if (a === 'aspect') {
       const z = $('cs-aspect'); z.classList.toggle('cache');
       if (!z.classList.contains('cache')) construireAspect(z, n);
-    } else if (a === 'epingle') { n.fixe = !n.fixe; sauverNoeud(n); majSelection(n); carte.reveiller(0.5); toast(n.fixe ? 'Sommet fixé : il ne bouge plus' : 'Sommet libéré'); }
+    } else if (a === 'epingle') { basculerEpingle(n); majSelection(n); }
+    else if (a === 'ranger') { carte.enfantsDe(n).forEach((c) => { if (c.fixe) { c.fixe = false; sauverNoeud(c); } }); carte.reindexer(); carte.reveiller(0.8); majSelection(n); toast("Enfants remis sur l'orbite"); }
     else if (a === 'suppr') supprimerNoeud(n);
   });
   function finirRelier() {
@@ -246,8 +277,16 @@
     const s = parId.get(carte.selection); if (!s || s === n) return;
     const ex = etat.liens.find((l) => (l.a === s.id && l.b === n.id) || (l.a === n.id && l.b === s.id));
     if (ex) { etat.liens = etat.liens.filter((l) => l !== ex); DB.supprimer('liens', [ex.id]).catch(() => {}); toast('Lien retiré avec « ' + (n.titre || 'Sans titre').slice(0, 24) + ' »'); }
-    else { const l = { id: nouvelId(), a: s.id, b: n.id }; etat.liens.push(l); DB.mettre('liens', [l]).catch(() => {}); toast('Relié à « ' + (n.titre || 'Sans titre').slice(0, 24) + ' »'); }
+    else { const l = { id: nouvelId(), a: s.id, b: n.id, t: 'ref' }; etat.liens.push(l); DB.mettre('liens', [l]).catch(() => {}); toast('Relié à « ' + (n.titre || 'Sans titre').slice(0, 24) + ' »'); }
     carte.reindexer(); carte.reveiller(0.8);
+  }
+
+  function lierRef(a, b) {                      // mention d'une page dans une autre : un lien d'association sur la carte (sans orbite)
+    if (!a || !b || a === b) return;
+    if (etat.liens.some((l) => (l.a === a.id && l.b === b.id) || (l.a === b.id && l.b === a.id))) return;
+    const l = { id: nouvelId(), a: a.id, b: b.id, t: 'ref' };
+    etat.liens.push(l); DB.mettre('liens', [l]).catch(() => {});
+    carte.reindexer(); carte.reveiller(0.6);
   }
 
   /* ---------- recherche (loupe) ---------- */
@@ -317,7 +356,7 @@
     ns.forEach((n) => {
       const b = document.createElement('button'); b.className = 'note';
       b.innerHTML = '<b>' + surligner(n.titre || 'Sans titre', jetons) + '</b>' + (n.texte ? '<p>' + surligner(extrait(n, jetons), jetons) + '</p>' : '') +
-        '<div class="meta">' + n.tags.map((t) => '<span class="tag">#' + esc(t) + '</span>').join('') + '<span class="quand">' + dateFr(n.modifie) + '</span></div>';
+        '<div class="meta">' + (n.jour ? '<span class="tag">📅 journal</span>' : '') + n.tags.map((t) => '<span class="tag">#' + esc(t) + '</span>').join('') + '<span class="quand">' + dateFr(n.modifie) + '</span></div>';
       b.onclick = () => ouvrirNoeud(n);
       liste.appendChild(b);
     });
@@ -329,12 +368,81 @@
     const n = creerNoeud(t.trim() || 'Sans titre', null);
     ouvrirNoeud(n);
   };
-  $('n-jour').onclick = () => {
-    const d = new Date(), cle = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  $('n-jour').onclick = () => ouvrirJour(cleDe(new Date()));
+
+  /* ---------- journal : une page vierge par jour ---------- */
+  const cleDe = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const dateDeCle = (c) => { const p = c.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
+  const maj1 = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+  const titreAuto = (cle) => maj1(dateFr(dateDeCle(cle), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
+  const aContenu = (n) => (n.texte || '').replace(/\s+/g, '').length > 0 || /data-f=/.test(n.html || '');
+  const aPhotos = (n) => /<(img|video)[^>]*data-f=/.test(n.html || '');
+  const titreParDefaut = (n) => n.titre === titreAuto(n.jour) || /^Journée · /.test(n.titre || '') || !n.titre;
+  let moisVu = (() => { const d = new Date(); return { a: d.getFullYear(), m: d.getMonth() }; })();
+  let urlsVignettes = [];
+
+  function ouvrirJour(cle) {
     let n = etat.noeuds.find((x) => x.jour === cle);
-    if (!n) { n = creerNoeud('Journée · ' + dateFr(d, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }), null, { jour: cle, tags: ['journée'] }); }
-    ouvrirNoeud(n);
-  };
+    if (!n) n = creerNoeud(titreAuto(cle), null, { jour: cle, couleur: COULEUR_JOUR, taille: 1 });
+    const aujourdhui = cle === cleDe(new Date());
+    ouvrirNoeud(n, { mode: aujourdhui || !aContenu(n) ? 'ecrire' : 'lire' });
+  }
+  function retirerSiVide(n) {                    // une page de jour restée vierge ne laisse aucune trace
+    if (!n || !n.jour || aContenu(n) || !titreParDefaut(n) || n.tags.length) return;
+    if (etat.liens.some((l) => l.a === n.id || l.b === n.id)) return;
+    if (etat.noeuds.some((x) => x !== n && (x.html || '').includes('data-n="' + n.id + '"'))) return;
+    etat.noeuds = etat.noeuds.filter((x) => x !== n); file.delete(n.id);
+    DB.supprimer('noeuds', [n.id]).catch(() => {});
+    if (carte.selection === n.id) carte.choisir(null);
+    indexer(); carte.reveiller(0.4); dessinerNotes(); majVide();
+  }
+  async function vignette(n, img) {
+    const m = /<img[^>]*data-f="([^"]+)"/.exec(n.html || ''); if (!m) return;
+    try {
+      const f = await DB.lire('fichiers', m[1]);
+      if (f && f.blob) { const u = URL.createObjectURL(f.blob); urlsVignettes.push(u); img.src = u; img.classList.remove('cache'); }
+    } catch (e) { /* tant pis */ }
+  }
+  function dessinerJournal() {
+    urlsVignettes.forEach((u) => URL.revokeObjectURL(u)); urlsVignettes = [];
+    const { a, m } = moisVu, auj = cleDe(new Date());
+    const parJour = new Map(); etat.noeuds.forEach((n) => { if (n.jour && /^\d{4}-\d{2}-\d{2}$/.test(n.jour)) parJour.set(n.jour, n); });
+    const ecrits = [...parJour.values()].filter(aContenu);
+    const ceMois = ecrits.filter((n) => n.jour.startsWith(a + '-' + String(m + 1).padStart(2, '0'))).length;
+    $('j-mois').textContent = maj1(new Date(a, m, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }));
+    $('j-stats').textContent = ecrits.length ? ecrits.length + (ecrits.length > 1 ? ' jours écrits' : ' jour écrit') + ' · ' + ceMois + ' ce mois-ci' : 'Ton journal de bord est encore vide. Chaque jour, une page vierge.';
+    const nAuj = parJour.get(auj);
+    $('j-auj').textContent = nAuj && aContenu(nAuj) ? "Continuer aujourd'hui" : "Écrire aujourd'hui";
+    const g = $('j-grille'); g.innerHTML = '';
+    const decal = (new Date(a, m, 1).getDay() + 6) % 7, nbj = new Date(a, m + 1, 0).getDate();
+    for (let i = 0; i < decal; i++) g.appendChild(document.createElement('span'));
+    for (let j = 1; j <= nbj; j++) {
+      const cle = a + '-' + String(m + 1).padStart(2, '0') + '-' + String(j).padStart(2, '0'), n = parJour.get(cle);
+      const b = document.createElement('button'); b.className = 'cj' + (cle === auj ? ' auj' : '') + (cle > auj ? ' fut' : '');
+      const ec = n && aContenu(n);
+      b.innerHTML = '<span>' + j + '</span><em>' + (ec ? '<i class="d"></i>' : '') + (ec && aPhotos(n) ? '<i class="d p"></i>' : '') + '</em>';
+      b.setAttribute('aria-label', titreAuto(cle));
+      b.onclick = () => ouvrirJour(cle);
+      g.appendChild(b);
+    }
+    $('j-liste-titre').textContent = ceMois ? 'Ce mois-ci' : '';
+    const liste = $('j-liste'); liste.innerHTML = '';
+    ecrits.filter((n) => n.jour.startsWith(a + '-' + String(m + 1).padStart(2, '0'))).sort((x, y) => (y.jour < x.jour ? -1 : 1)).forEach((n) => {
+      const b = document.createElement('button'); b.className = 'note jour-ligne';
+      const d = dateDeCle(n.jour);
+      b.innerHTML = '<div class="jl-date"><small>' + esc(d.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '')) + '</small><b>' + d.getDate() + '</b></div>' +
+        '<div class="jl-txt"><b>' + esc(titreParDefaut(n) ? maj1(dateFr(d, { weekday: 'long', day: 'numeric', month: 'long' })) : n.titre) + '</b><p>' + esc((n.texte || '').slice(0, 140) || (aPhotos(n) ? 'Photos' : 'Pièce jointe')) + '</p></div>' +
+        (aPhotos(n) ? '<img class="jl-img cache" alt="">' : '');
+      b.onclick = () => ouvrirJour(n.jour);
+      liste.appendChild(b);
+      const im = b.querySelector('.jl-img'); if (im) vignette(n, im);
+    });
+  }
+  function changerMois(d) { let m = moisVu.m + d, a = moisVu.a; if (m < 0) { m = 11; a--; } if (m > 11) { m = 0; a++; } moisVu = { a, m }; dessinerJournal(); }
+  $('j-prec').onclick = () => changerMois(-1); $('j-suiv').onclick = () => changerMois(1);
+  $('j-mois').onclick = () => { const d = new Date(); moisVu = { a: d.getFullYear(), m: d.getMonth() }; dessinerJournal(); };
+  $('j-auj').onclick = () => { const d = new Date(); moisVu = { a: d.getFullYear(), m: d.getMonth() }; ouvrirJour(cleDe(d)); };
+  $('j-sauve').onclick = () => exporter();
 
   /* ---------- éditeur ---------- */
   function menuNoeud(n, menu, fermer) {
@@ -343,18 +451,18 @@
     const zone = document.createElement('div'); zone.className = 'aspect cache';
     bouton('Forme et couleur', () => { zone.classList.toggle('cache'); if (!zone.classList.contains('cache')) construireAspect(zone, n); });
     menu.appendChild(zone);
-    bouton(n.fixe ? 'Libérer la position' : 'Fixer la position', () => { n.fixe = !n.fixe; sauverNoeud(n); fermer(); toast(n.fixe ? 'Sommet fixé' : 'Sommet libéré'); carte.reveiller(0.5); });
+    bouton(libelleEpingle(n) === 'Fixer' ? 'Fixer la position' : libelleEpingle(n) === 'Libérer' ? 'Libérer la position' : libelleEpingle(n), () => { basculerEpingle(n); fermer(); });
     bouton('Supprimer ce sommet', () => { fermer(); supprimerNoeud(n); }, 'danger');
   }
   editeur = CE.creer({
     DB, etat, icones: { retour: IC.retour, oeil: IC.oeil, crayon: IC.crayon, plus3: IC.plus3 },
-    modale: { saisie, lienColle }, parId, creerNoeud: (t, p) => creerNoeud(t, p), toast, palette: () => etat.meta.palette, editerPalette, tousLesTags, menuNoeud,
+    modale: { saisie, lienColle }, parId, creerNoeud: (t, p) => creerNoeud(t, p), lierRef, toast, palette: () => etat.meta.palette, editerPalette, tousLesTags, menuNoeud,
     sauverNoeud: (n) => { sauverNoeud(n); },
     titreChange: (n) => { carte.redessiner(); },
-    ferme: () => { dessinerNotes(); carte.reindexer(); carte.redessiner(); majSelection(parId.get(carte.selection) || null); majRecherchePlace(); },
+    ferme: (noeud) => { retirerSiVide(noeud); dessinerNotes(); if (vueCourante === 'journal') dessinerJournal(); carte.reindexer(); carte.redessiner(); majSelection(parId.get(carte.selection) || null); majRecherchePlace(); },
   });
   function majRecherchePlace() { if (!$('recherche').classList.contains('cache')) majRecherche(); }
-  function ouvrirNoeud(n) { if (modeLien) finirRelier(); editeur.ouvrir(n); }
+  function ouvrirNoeud(n, options) { if (modeLien) finirRelier(); editeur.ouvrir(n, options); }
   function voirSurCarte(n) { editeur.fermer(); aller('carte'); setTimeout(() => carte.choisir(n.id, true), 80); }
 
   /* ---------- onglets ---------- */
@@ -364,6 +472,7 @@
     document.querySelectorAll('#onglets button').forEach((b) => b.classList.toggle('actif', b.dataset.v === v));
     carte.activer(v === 'carte');
     if (v === 'notes') dessinerNotes();
+    if (v === 'journal') dessinerJournal();
     if (v === 'reglages') dessinerReglages();
     majVide();
   }
@@ -373,7 +482,11 @@
   async function dessinerReglages() {
     const p = $('r-palette'); p.innerHTML = '';
     etat.meta.palette.forEach((c) => { const d = document.createElement('span'); d.className = 'pa'; d.innerHTML = '<i style="background:' + esc(c.c) + '"></i>' + esc(c.nom || '—'); p.appendChild(d); });
-    const sw = $('r-anim'); sw.setAttribute('aria-checked', etat.meta.animer !== false); sw.querySelector('.sw').classList.toggle('on', etat.meta.animer !== false);
+    [['r-anim', etat.meta.animer !== false], ['r-orb', etat.meta.orbites !== false], ['r-jours', etat.meta.jours !== false]].forEach(([id, on]) => { const sw = $(id); sw.setAttribute('aria-checked', on); sw.querySelector('.sw').classList.toggle('on', on); });
+    $('b-jours').classList.toggle('off', etat.meta.jours === false);
+    const ds = etat.meta.derniereSauvegarde;
+    $('r-derniere').textContent = ds ? 'Dernière sauvegarde : ' + dateFr(ds, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : "Tu n'as encore jamais fait de sauvegarde.";
+    $('r-derniere').style.color = ds ? '' : '#ffb454';
     let txt = etat.noeuds.length + (etat.noeuds.length > 1 ? ' sommets' : ' sommet') + ' · ' + etat.liens.length + (etat.liens.length > 1 ? ' liens' : ' lien');
     try {
       if (navigator.storage && navigator.storage.estimate) { const e = await navigator.storage.estimate(); txt += ' · ' + CE.taille(e.usage || 0) + ' utilisés'; }
@@ -383,6 +496,10 @@
   }
   $('r-palette-edit').onclick = editerPalette;
   $('r-anim').onclick = () => { etat.meta.animer = etat.meta.animer === false; sauverMeta(); dessinerReglages(); carte.redessiner(); };
+  $('r-orb').onclick = () => { etat.meta.orbites = etat.meta.orbites === false; sauverMeta(); dessinerReglages(); carte.reindexer(); carte.reveiller(1); toast(etat.meta.orbites ? 'Orbites activées' : 'Orbites désactivées'); };
+  function basculerJours() { etat.meta.jours = etat.meta.jours === false; sauverMeta(); dessinerReglages(); carte.reindexer(); carte.reveiller(0.3); if (vueCourante === 'carte') toast(etat.meta.jours ? 'Jours du journal affichés' : 'Jours du journal cachés'); }
+  $('r-jours').onclick = basculerJours; $('b-jours').onclick = basculerJours;
+  $('r-ranger').onclick = () => { etat.noeuds.forEach((n) => { if (n.fixe && (n._j || carte.parentDe(n))) { n.fixe = false; file.add(n.id); } }); sauverPositions(); carte.reindexer(); carte.reveiller(1); toast('Tout est remis sur les orbites'); aller('carte'); };
   $('r-exemple').onclick = () => { ajouterExemple(); toast('Exemple ajouté'); aller('carte'); setTimeout(() => carte.recentrer(), 100); };
   $('r-efface').onclick = async () => {
     if (!(await confirmer('Tout effacer ?', 'Tous tes sommets, notes et pièces jointes seront supprimés de cet iPhone. Fais une sauvegarde avant si tu hésites.', 'Tout effacer', true))) return;
@@ -392,16 +509,22 @@
   /* ---------- sauvegarde / restauration ---------- */
   async function exporter() {
     try {
-      await flush(); editeur.sauverMaintenant();
+      toast('Préparation de la sauvegarde…');
+      await flush(); editeur.sauverMaintenant(); await flush();
       const fich = await DB.tout('fichiers');
-      const entete = JSON.stringify({ v: 1, date: Date.now(), noeuds: etat.noeuds.map(pur), liens: etat.liens, meta: etat.meta, fichiers: fich.map((f) => ({ id: f.id, nom: f.nom, type: f.type, taille: f.blob.size })) });
+      const meta = {}; CLES_META.forEach((c) => { meta[c] = etat.meta[c]; });
+      const entete = JSON.stringify({ v: 4, date: Date.now(), noeuds: etat.noeuds.map(pur), liens: etat.liens, meta, fichiers: fich.map((f) => ({ id: f.id, nom: f.nom, type: f.type, taille: f.blob.size })) });
       const hb = new TextEncoder().encode(entete), len = new Uint8Array(4); new DataView(len.buffer).setUint32(0, hb.length);
       const blob = new Blob(['CERV1\n', len, hb, ...fich.map((f) => f.blob)], { type: 'application/octet-stream' });
       const nom = 'cerveau-' + new Date().toISOString().slice(0, 10) + '.cerveau';
       const f = new File([blob], nom, { type: 'application/octet-stream' });
-      if (navigator.canShare && navigator.canShare({ files: [f] })) { try { await navigator.share({ files: [f], title: 'Sauvegarde Cerveau' }); toast('Sauvegarde prête'); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+      const marquer = () => { etat.meta.derniereSauvegarde = Date.now(); sauverMeta(); if (vueCourante === 'reglages') dessinerReglages(); };
+      if (navigator.canShare && navigator.canShare({ files: [f] })) {
+        try { await navigator.share({ files: [f], title: 'Sauvegarde Cerveau' }); marquer(); toast('Sauvegarde prête (' + CE.taille(blob.size) + ')'); return; }
+        catch (e) { if (e && e.name === 'AbortError') return; }
+      }
       const u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = nom; document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(u), 20000); toast('Sauvegarde téléchargée');
+      setTimeout(() => URL.revokeObjectURL(u), 20000); marquer(); toast('Sauvegarde téléchargée (' + CE.taille(blob.size) + ')');
     } catch (e) { toast('La sauvegarde a échoué'); }
   }
   async function importer(fichier) {
@@ -409,15 +532,22 @@
       if ((await fichier.slice(0, 6).text()) !== 'CERV1\n') throw new Error('format');
       const len = new DataView(await fichier.slice(6, 10).arrayBuffer()).getUint32(0);
       const tete = JSON.parse(await fichier.slice(10, 10 + len).text());
-      if (!(await confirmer('Restaurer cette sauvegarde ?', tete.noeuds.length + ' sommets, ' + tete.liens.length + ' liens' + (tete.date ? ', du ' + dateFr(tete.date, { day: 'numeric', month: 'long', year: 'numeric' }) : '') + '. Ce qui est dans l\'appli maintenant sera remplacé.', 'Restaurer', true))) return;
+      const nj = tete.noeuds.filter((n) => n.jour).length, nf = (tete.fichiers || []).length;
+      if (!(await confirmer('Restaurer cette sauvegarde ?', tete.noeuds.length + ' sommets, ' + tete.liens.length + ' liens' + (nj ? ', ' + nj + ' jours de journal' : '') + (nf ? ', ' + nf + ' photos et fichiers' : '') + (tete.date ? ', du ' + dateFr(tete.date, { day: 'numeric', month: 'long', year: 'numeric' }) : '') + '. Ce qui est dans l\'appli maintenant sera remplacé.', 'Restaurer', true))) return;
+      toast('Restauration en cours…');
       await DB.vider();
       let off = 10 + len;
-      for (const f of tete.fichiers) {
+      for (const f of (tete.fichiers || [])) {
         const b = new Blob([await fichier.slice(off, off + f.taille).arrayBuffer()], { type: f.type });
         await DB.mettre('fichiers', [{ id: f.id, nom: f.nom, type: f.type, taille: f.taille, blob: b }]); off += f.taille;
       }
       await DB.mettre('noeuds', tete.noeuds.map((n) => pur(completer(n)))); await DB.mettre('liens', tete.liens);
-      await DB.mettre('meta', [{ cle: 'palette', valeur: (tete.meta && tete.meta.palette) || PALETTE_DEFAUT }, { cle: 'animer', valeur: !tete.meta || tete.meta.animer !== false }]);
+      const m = tete.meta || {};
+      await DB.mettre('meta', [
+        { cle: 'palette', valeur: Array.isArray(m.palette) && m.palette.length ? m.palette : PALETTE_DEFAUT },
+        { cle: 'animer', valeur: m.animer !== false }, { cle: 'orbites', valeur: m.orbites !== false }, { cle: 'jours', valeur: m.jours !== false },
+        { cle: 'couleursPerso', valeur: Array.isArray(m.couleursPerso) ? m.couleursPerso : [] }, { cle: 'derniereSauvegarde', valeur: tete.date || null },
+      ]);
       location.reload();
     } catch (e) { toast("Ce fichier n'est pas une sauvegarde Cerveau"); }
   }
@@ -450,7 +580,12 @@
     if (ok) {
       const [ns, ls, ms] = await Promise.all([DB.tout('noeuds'), DB.tout('liens'), DB.tout('meta')]);
       etat.noeuds = ns.map(completer); etat.liens = ls;
-      ms.forEach((m) => { if (m.cle === 'palette' && Array.isArray(m.valeur) && m.valeur.length) etat.meta.palette = m.valeur; if (m.cle === 'animer') etat.meta.animer = m.valeur !== false; });
+      ms.forEach((m) => {
+        if (m.cle === 'palette' && Array.isArray(m.valeur) && m.valeur.length) etat.meta.palette = m.valeur;
+        else if (m.cle === 'animer' || m.cle === 'orbites' || m.cle === 'jours') etat.meta[m.cle] = m.valeur !== false;
+        else if (m.cle === 'couleursPerso' && Array.isArray(m.valeur)) etat.meta.couleursPerso = m.valeur;
+        else if (m.cle === 'derniereSauvegarde') etat.meta.derniereSauvegarde = m.valeur || null;
+      });
       try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* rien */ }
     }
     indexer();
@@ -459,16 +594,19 @@
       ouvrir: ouvrirNoeud,
       relier: basculerLien,
       annulerRelier: () => {},
-      deplace: (n) => { sauverNoeud(n); },
+      deplace: (n) => { sauverNoeud(n); carte.reindexer(); majSelection(n); },
       positionsStables: sauverPositions,
     });
+    indexer();
+    // pages de jour restées vierges (appli fermée en cours d'écriture) : on les retire en silence
+    [...etat.noeuds].filter((n) => n.jour).forEach(retirerSiVide);
     indexer();
     aller('carte');
     if (etat.noeuds.length) { carte.recentrer(); carte.reveiller(0.25); }
     if (!ok) toast("Stockage indisponible : tes notes ne seront pas gardées (désactive la navigation privée)");
     setTimeout(nettoyerFichiers, 4000);
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
-    self.CerveauApp = { etat, carte, editeur, creerNoeud, ouvrirNoeud, aller, parId, ajouterExemple, exporter, modale: { saisie, confirmer } };
+    self.CerveauApp = { etat, carte, editeur, creerNoeud, ouvrirNoeud, aller, parId, ajouterExemple, exporter, ouvrirJour, cleDe, lierRef, importer, modale: { saisie, confirmer } };
   }
   demarrer();
 })();
