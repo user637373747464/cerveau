@@ -116,6 +116,15 @@
       });
     });
   }
+  function choix(titre, texte, opts) {
+    return new Promise((res) => {
+      ouvrirModale('<h3>' + esc(titre) + '</h3>' + (texte ? '<p>' + esc(texte) + '</p>' : '') + opts.map((o, i) => '<button class="act gros' + (o.plein ? ' plein' : '') + '" data-i="' + i + '">' + esc(o.label) + '</button>').join(''), (boite, fermer) => {
+        const fin = (v) => { fermer(); res(v); };
+        boite.querySelectorAll('[data-i]').forEach((b) => { b.onclick = () => fin(+b.dataset.i); });
+        $('modale')._annuler = () => fin(null);
+      });
+    });
+  }
   function confirmer(titre, texte, ok, danger) {
     return new Promise((res) => {
       ouvrirModale('<h3>' + esc(titre) + '</h3><p>' + esc(texte) + '</p><div class="boutons"><button class="act" id="m-non">Annuler</button><button class="act ' + (danger ? 'danger' : 'plein') + '" id="m-ok">' + esc(ok || 'OK') + '</button></div>', (boite, fermer) => {
@@ -397,9 +406,10 @@
     indexer(); carte.reveiller(0.4); dessinerNotes(); majVide();
   }
   async function vignette(n, img) {
-    const m = /<img[^>]*data-f="([^"]+)"/.exec(n.html || ''); if (!m) return;
+    const tmp = document.createElement('div'); tmp.innerHTML = n.html || '';
+    const premiere = [...tmp.querySelectorAll('img[data-f]')].find((i) => !i.closest('.spoil')); if (!premiere) return;
     try {
-      const f = await DB.lire('fichiers', m[1]);
+      const f = await DB.lire('fichiers', premiere.getAttribute('data-f'));
       if (f && f.blob) { const u = URL.createObjectURL(f.blob); urlsVignettes.push(u); img.src = u; img.classList.remove('cache'); }
     } catch (e) { /* tant pis */ }
   }
@@ -456,7 +466,7 @@
   }
   editeur = CE.creer({
     DB, etat, icones: { retour: IC.retour, oeil: IC.oeil, crayon: IC.crayon, plus3: IC.plus3 },
-    modale: { saisie, lienColle }, parId, creerNoeud: (t, p) => creerNoeud(t, p), lierRef, toast, palette: () => etat.meta.palette, editerPalette, tousLesTags, menuNoeud,
+    modale: { saisie, lienColle, choix }, parId, creerNoeud: (t, p) => creerNoeud(t, p), lierRef, toast, palette: () => etat.meta.palette, editerPalette, tousLesTags, menuNoeud,
     sauverNoeud: (n) => { sauverNoeud(n); },
     titreChange: (n) => { carte.redessiner(); },
     ferme: (noeud) => { retirerSiVide(noeud); dessinerNotes(); if (vueCourante === 'journal') dessinerJournal(); carte.reindexer(); carte.redessiner(); majSelection(parId.get(carte.selection) || null); majRecherchePlace(); },

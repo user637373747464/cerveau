@@ -56,3 +56,7 @@ Pour mettre à jour : remplace les fichiers dans ton dépôt, puis ferme et rouv
 - **Sauvegarde complète** : un seul fichier `.cerveau` avec toutes les pages, tous les liens, les orbites/réglages, le code couleur **et toutes les photos/fichiers**. Bouton « Sauvegarder » dans Journal et dans Réglages (qui affiche la date de la dernière sauvegarde). « Restaurer » remet tout.
 
 Pour mettre à jour : remplace les fichiers dans ton dépôt, puis ferme et rouvre l'appli deux fois. Tes notes et photos ne bougent pas.
+
+## Spoilers (v4.1)
+
+Quand tu ajoutes une ou plusieurs images (📷, 📎 ou collage), l'appli demande « Image normale » ou « Spoiler (cachée) ». Un spoiler est flouté : touche-le pour l'afficher ; il se recache dès que tu quittes la page (ou que tu quittes l'appli). Pour changer une image déjà posée : en mode écriture, touche-la (une fois affichée) et choisis. Les spoilers ne servent pas de vignette dans le Journal.

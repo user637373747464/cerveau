@@ -81,6 +81,11 @@
       return b || f;
     }
     async function ajouterFichiers(liste) {
+      let spoiler = false;
+      if (liste.some((f) => /^image\//.test(f.type || '')) && ctx.modale.choix) {
+        const c = await ctx.modale.choix('Afficher comment ?', 'Un spoiler reste caché : il faut toucher l\'image pour la voir, et elle se recache dès que tu quittes la page.', [{ label: 'Image normale' }, { label: 'Spoiler (cachée)', plein: true }]);
+        spoiler = c === 1;
+      }
       for (const f of liste) {
         const nom = f.name || 'fichier';
         try {
@@ -89,7 +94,7 @@
           const id = nouvelId();
           await ctx.DB.mettre('fichiers', [{ id, nom, type, taille: blob.size, blob }]);
           let h;
-          if (/^image\//.test(type)) h = '<div><img data-f="' + id + '" alt="' + esc(nom) + '"></div><div><br></div>';
+          if (/^image\//.test(type)) h = (spoiler ? '<div class="spoil" data-spoiler="1" contenteditable="false"><img data-f="' + id + '" alt="' + esc(nom) + '"></div>' : '<div><img data-f="' + id + '" alt="' + esc(nom) + '"></div>') + '<div><br></div>';
           else if (/^video\//.test(type)) h = '<div><video data-f="' + id + '" controls playsinline preload="metadata"></video></div><div><br></div>';
           else h = '<div><a class="fichier" data-f="' + id + '" data-nom="' + esc(nom) + '" data-type="' + esc(type) + '" contenteditable="false">📎 ' + esc(nom) + '<small>' + taille(blob.size) + '</small></a></div><div><br></div>';
           inserer(h);
@@ -121,6 +126,7 @@
       const c = corps.cloneNode(true);
       c.querySelectorAll('img[data-f],video[data-f]').forEach((e) => e.removeAttribute('src'));
       c.querySelectorAll('[data-repere]').forEach((e) => e.remove());
+      c.querySelectorAll('[data-vu]').forEach((e) => e.removeAttribute('data-vu'));
       let h = c.innerHTML;
       if (h === '<br>' || h === '<div><br></div>') h = '';
       return h;
@@ -477,11 +483,29 @@
       if (wk) { e.preventDefault(); allerWiki(wk.getAttribute('data-n')); return; }
       const fich = cible.closest && cible.closest('a.fichier');
       if (fich) { e.preventDefault(); ouvrirFichier(fich.getAttribute('data-f')); return; }
+      const sp = cible.closest && cible.closest('.spoil');
+      if (sp) {
+        e.preventDefault();
+        if (!sp.hasAttribute('data-vu')) { sp.setAttribute('data-vu', '1'); return; }
+        const im = sp.querySelector('img[data-f]');
+        if (mode === 'lire') { if (im) ouvrirFichier(im.getAttribute('data-f')); return; }
+        ctx.modale.choix('Cette image', 'Cachée derrière un spoiler, ou affichée normalement ?', [{ label: 'Image normale' }, { label: 'Spoiler (cachée)', plein: true }]).then((c) => { if (c === 0 && im) { const d = document.createElement('div'); d.appendChild(im); sp.replaceWith(d); } else if (c === 1) sp.removeAttribute('data-vu'); if (c !== null) synchroniser(); });
+        return;
+      }
       const img = cible.closest && cible.closest('img[data-f]');
+      if (img && mode === 'ecrire') {
+        e.preventDefault();
+        ctx.modale.choix('Cette image', 'Cachée derrière un spoiler, ou affichée normalement ?', [{ label: 'Image normale' }, { label: 'Spoiler (cachée)', plein: true }]).then((c) => {
+          if (c === 1 && img.isConnected) { const w = document.createElement('div'); w.className = 'spoil'; w.setAttribute('data-spoiler', '1'); w.contentEditable = 'false'; img.replaceWith(w); w.appendChild(img); synchroniser(); }
+        });
+        return;
+      }
       if (img && mode === 'lire') { e.preventDefault(); ouvrirFichier(img.getAttribute('data-f')); return; }
       const a = cible.closest && cible.closest('a[href]');
       if (a && (mode === 'lire' || a.closest('.yt'))) { e.preventDefault(); window.open(a.href, '_blank', 'noopener'); }
     });
+
+    document.addEventListener('visibilitychange', () => { if (document.hidden) corps.querySelectorAll('.spoil[data-vu]').forEach((x) => x.removeAttribute('data-vu')); });
 
     /* ---------- ouverture / fermeture ---------- */
     function majClavier() {                 // clavier ouvert pendant qu'on écrit la note : on libère de la place (jamais si le curseur est dans un autre champ, sinon il disparaîtrait)

@@ -261,3 +261,9 @@ input { font: inherit; color: inherit; }
 .r-chip.jour { background: rgba(255,209,102,.16); color: #ffd166; }
 .editeur.clavier .ed-retro { display: none; }
 #ed-titre { text-overflow: ellipsis; }
+
+/* spoilers */
+.corps .spoil { position: relative; display: block; margin: 8px 0; border-radius: 14px; overflow: hidden; background: #1b1b20; min-height: 90px; -webkit-user-select: none; user-select: none; }
+.corps .spoil img { margin: 0; border-radius: 0; width: 100%; }
+.corps .spoil:not([data-vu]) img { filter: blur(34px) brightness(.55); transform: scale(1.2); }
+.corps .spoil:not([data-vu])::after { content: "Spoiler · touche pour afficher"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 12px; font-weight: 800; font-size: 16px; color: #fff; background: rgba(0,0,0,.28); }
