@@ -167,14 +167,19 @@
       anim = { de: cam.cible.slice(), vers: [n.x - u[0] * k, n.y - u[1] * k, n.z - u[2] * k], d0: cam.dist, d1, t: 0 };
       sale = true;
     }
-    function ajustement() {                 // centre et distance qui montrent tout le graphe
-      const ns = etat.noeuds.filter((n) => !cache(n));
+    function ajustement(sous) {                 // centre et distance qui montrent tout le graphe (ou seulement l'ensemble « sous »)
+      const ns = etat.noeuds.filter((n) => !cache(n) && (!sous || sous.has(n.id)));
       if (!ns.length) return { c: [0, 0, 0], d: 14 };
       const c = [0, 0, 0]; ns.forEach((n) => { c[0] += n.x; c[1] += n.y; c[2] += n.z; });
       c[0] /= ns.length; c[1] /= ns.length; c[2] /= ns.length;
       let R = 0; ns.forEach((n) => { R = Math.max(R, Math.hypot(n.x - c[0], n.y - c[1], n.z - c[2])); });
       const large = Math.min(W, H) / Math.min(W, H);   // on cadre sur le plus petit côté de l'écran
-      return { c, d: borne((R + 1.5) * 2.8 * large + 2, 8, 1500) };
+      return { c, d: borne((R + 1.5) * (sous ? 3.8 : 2.8) * large + 2, 8, 4000) };
+    }
+    function cadrer(ids) {                  // la caméra vole vers un groupe de sommets
+      const a = ajustement(ids); auto = false;
+      anim = { de: cam.cible.slice(), vers: a.c, d0: cam.dist, d1: a.d, t: 0 };
+      sale = true;
     }
     function recentrer() {
       const a = ajustement(); auto = true;
@@ -438,24 +443,34 @@
         // anneaux : sélection, voisins, résultats de recherche
         const pulse = 0.5 + 0.5 * Math.sin(temps * 0.004);
         if (sel && n.id === sel.id) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(n._sx, n._sy, Math.max(r, 3) * 1.55 + 2, 0, 6.2832); ctx.stroke(); }
-        else if (filtre && filtre.has(n.id)) { ctx.strokeStyle = 'rgba(255,224,102,' + (0.5 + 0.5 * pulse).toFixed(2) + ')'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(n._sx, n._sy, Math.max(r, 3) * 1.5 + 2, 0, 6.2832); ctx.stroke(); }
+        else if (filtre && filtre.size <= 12 && filtre.has(n.id)) { ctx.strokeStyle = 'rgba(255,224,102,' + (0.5 + 0.5 * pulse).toFixed(2) + ')'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(n._sx, n._sy, Math.max(r, 3) * 1.5 + 2, 0, 6.2832); ctx.stroke(); }
         else if (mode === 'relier' && sel) { ctx.strokeStyle = 'rgba(255,255,255,' + (0.25 + 0.35 * pulse).toFixed(2) + ')'; ctx.lineWidth = 1.2; ctx.setLineDash([3, 4]); ctx.beginPath(); ctx.arc(n._sx, n._sy, Math.max(r, 3) * 1.5 + 2, 0, 6.2832); ctx.stroke(); ctx.setLineDash([]); }
       }
-      // étiquettes : les plus proches + sélection + résultats
+      // étiquettes « galaxie » : les plus gros d'abord ; chaque nom n'apparaît que s'il a la place (sans chevaucher un nom déjà posé)
       ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
-      const proches = visibles.slice().sort((a, b) => a._z - b._z);
-      let nb = 0;
-      const maxEt = W > 500 ? 40 : 22;
-      for (const n of proches) {
-        const importante = (sel && (n.id === sel.id || voisins.has(n.id))) || (filtre && filtre.has(n.id));
-        if (!importante && (nb >= maxEt || n._pr < 5)) continue;
-        if (!importante) nb++;
+      const cands = [];
+      for (const n of visibles) {
+        const forcee = !!(sel && (n.id === sel.id || voisins.has(n.id)));
+        const dansFiltre = !!(filtre && filtre.has(n.id));
+        if (filtre && !dansFiltre && !forcee) continue;
+        if (!forcee && !dansFiltre && n._pr < 4) continue;
         if (n._sx < -40 || n._sx > W + 40 || n._sy < -20 || n._sy > H + 20) continue;
+        cands.push({ n, forcee, dansFiltre, p: (forcee ? 1e6 : 0) + (dansFiltre ? 1e3 : 0) + n._pr });
+      }
+      cands.sort((a, b) => b.p - a.p);
+      const pris = [];
+      for (const { n, forcee, dansFiltre } of cands) {
+        if (pris.length > 120) break;
+        const importante = forcee || dansFiltre;
         const taille = borne(11 + n._pr * 0.12, 11, 15);
-        const a = (filtre && !filtre.has(n.id) ? 0.25 : 1) * borne(1.5 - n._z / (cam.dist * 3), 0.35, 1);
+        const a = borne(1.5 - n._z / (cam.dist * 3), 0.35, 1);
         ctx.font = (importante ? '700 ' : '600 ') + taille.toFixed(0) + 'px -apple-system, system-ui, sans-serif';
         const t = (n._j ? (n.titre || n.jour).replace(/\s*20\d\d$/, '') : (n.titre || 'Sans titre')).slice(0, 26);
         const y = n._sy + Math.max(n._pr, 3) * 1.45 + 5;
+        const w = ctx.measureText(t).width;
+        const bx = [n._sx - w / 2 - 4, y - 2, n._sx + w / 2 + 4, y + taille + 4];
+        if (!forcee && pris.some((q) => bx[0] < q[2] && bx[2] > q[0] && bx[1] < q[3] && bx[3] > q[1])) continue;
+        pris.push(bx);
         ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(0,0,0,' + (0.85 * a).toFixed(2) + ')'; ctx.strokeText(t, n._sx, y);
         ctx.fillStyle = 'rgba(255,255,255,' + a.toFixed(2) + ')'; ctx.fillText(t, n._sx, y);
       }
@@ -541,7 +556,7 @@
         const [a, b] = [...pts.values()];
         const d = Math.hypot(a[0] - b[0], a[1] - b[1]), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
         if (geste.type !== 'deux') { geste = { type: 'deux', d, mx, my }; return; }
-        cam.dist = borne(cam.dist * (geste.d / Math.max(d, 1)), 2.5, 1500);
+        cam.dist = borne(cam.dist * (geste.d / Math.max(d, 1)), 2.5, 4000);
         const k = cam.dist / base.foc;
         const dx = mx - geste.mx, dy = my - geste.my;
         for (let i = 0; i < 3; i++) cam.cible[i] -= (base.r[i] * dx - base.u[i] * dy) * k;
@@ -572,7 +587,7 @@
       }
     }
     cv.addEventListener('pointerup', fin); cv.addEventListener('pointercancel', fin);
-    cv.addEventListener('wheel', (e) => { e.preventDefault(); auto = false; cam.dist = borne(cam.dist * Math.exp(e.deltaY * 0.0012), 2.5, 1500); sale = true; }, { passive: false });
+    cv.addEventListener('wheel', (e) => { e.preventDefault(); auto = false; cam.dist = borne(cam.dist * Math.exp(e.deltaY * 0.0012), 2.5, 4000); sale = true; }, { passive: false });
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
 
     function choisir(id, glisse) {
@@ -588,7 +603,7 @@
     reindexer();
 
     return {
-      reindexer, redim, recentrer, glisser, reveiller,
+      reindexer, redim, recentrer, cadrer, glisser, reveiller,
       choisir,
       suivre(b) { auto = b; },
       get selection() { return selection; },

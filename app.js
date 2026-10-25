@@ -338,11 +338,37 @@
     });
     if (!trouves.length) { const p = document.createElement('div'); p.className = 'aide'; p.style.padding = '8px 4px 2px'; p.textContent = 'Aucun sommet ne correspond.'; res.appendChild(p); }
   }
-  function ouvrirRecherche() { $('recherche').classList.remove('cache'); majRecherche(); setTimeout(() => $('q').focus(), 50); }
-  function fermerRecherche() { $('recherche').classList.add('cache'); $('q').value = ''; $('q').blur(); tagsActifs = new Set(); carte.definirFiltre(null); }
+  function ouvrirRecherche() { $('zones').classList.add('cache'); $('recherche').classList.remove('cache'); majRecherche(); setTimeout(() => $('q').focus(), 50); }
+  function fermerRecherche() { zoneActive = null; sigZones = ''; $('recherche').classList.add('cache'); $('q').value = ''; $('q').blur(); tagsActifs = new Set(); carte.definirFiltre(null); dessinerZones(true); }
   $('b-loupe').onclick = () => ($('recherche').classList.contains('cache') ? ouvrirRecherche() : fermerRecherche());
   $('q').addEventListener('input', majRecherche);
-  $('b-centrer').onclick = () => carte.recentrer();
+  $('b-centrer').onclick = () => { zoneActive = null; carte.definirFiltre(null); carte.recentrer(); dessinerZones(true); };
+
+  /* --- zones : un bouton par grand thème (tag utilisé par au moins 5 sommets) --- */
+  let zoneActive = null, sigZones = '';
+  function dessinerZones(force) {
+    const box = $('zones'); if (!box) return;
+    const cpt = new Map();
+    etat.noeuds.forEach((n) => { if (n.jour) return; n.tags.forEach((g) => cpt.set(g, (cpt.get(g) || 0) + 1)); });
+    const liste = [...cpt].filter(([, c]) => c >= 5).sort((a, b) => b[1] - a[1]);
+    const sig = liste.map(([g, c]) => g + c).join('|') + '#' + zoneActive;
+    if (!force && sig === sigZones) return;
+    sigZones = sig; box.innerHTML = '';
+    if (!liste.length) { box.classList.add('cache'); return; }
+    box.classList.remove('cache');
+    const mk = (txt, on, fn) => { const b = document.createElement('button'); b.className = 'puce' + (on ? ' on' : ''); b.innerHTML = txt; b.onclick = fn; box.appendChild(b); };
+    mk('Tout', !zoneActive, () => { zoneActive = null; carte.definirFiltre(null); carte.recentrer(); dessinerZones(true); });
+    liste.forEach(([g, c]) => mk(esc(g.charAt(0).toUpperCase() + g.slice(1)) + '<small>' + c + '</small>', zoneActive === g, () => {
+      if (zoneActive === g) { zoneActive = null; carte.definirFiltre(null); carte.recentrer(); }
+      else {
+        zoneActive = g;
+        const ids = new Set(etat.noeuds.filter((n) => !n.jour && n.tags.includes(g)).map((n) => n.id));
+        carte.definirFiltre(ids); carte.cadrer(ids);
+      }
+      dessinerZones(true);
+    }));
+  }
+  setInterval(() => { if (!$('recherche').classList.contains('cache')) return; dessinerZones(false); }, 1500);
   $('b-plus').onclick = async () => {
     const sel = parId.get(carte.selection);
     const r = await saisie('Nouveau sommet', 'Titre (ex. Philosophie)', '', { ok: 'Créer', case: sel ? { label: 'Relier à « ' + (sel.titre || 'Sans titre').slice(0, 30) + ' »', on: true } : null });
