@@ -174,7 +174,7 @@
       c[0] /= ns.length; c[1] /= ns.length; c[2] /= ns.length;
       let R = 0; ns.forEach((n) => { R = Math.max(R, Math.hypot(n.x - c[0], n.y - c[1], n.z - c[2])); });
       const large = Math.min(W, H) / Math.min(W, H);   // on cadre sur le plus petit côté de l'écran
-      return { c, d: borne((R + 1.5) * 2.5 * large + 2, 8, 140) };
+      return { c, d: borne((R + 1.5) * 2.8 * large + 2, 8, 1500) };
     }
     function recentrer() {
       const a = ajustement(); auto = true;
@@ -371,8 +371,8 @@
         if (!a || !b || !a._vis || !b._vis) continue;
         const prof = borne(1.25 - ((a._z + b._z) / 2) / (cam.dist * 3.2), 0.1, 1);
         const lie = sel && (l.a === sel.id || l.b === sel.id);
-        ctx.strokeStyle = lie ? 'rgba(255,255,255,' + (0.85 * prof).toFixed(2) + ')' : 'rgba(140,160,230,' + (0.42 * prof * Math.min(att(a), att(b)) + 0.04).toFixed(2) + ')';
-        ctx.lineWidth = lie ? 1.8 : 1;
+        ctx.strokeStyle = lie ? 'rgba(255,255,255,' + (0.85 * prof).toFixed(2) + ')' : 'rgba(52,54,68,' + (0.65 * prof * Math.min(att(a), att(b)) + 0.07).toFixed(2) + ')';
+        ctx.lineWidth = lie ? 1.3 : 0.6;
         ctx.beginPath(); ctx.moveTo(a._sx, a._sy); ctx.lineTo(b._sx, b._sy); ctx.stroke();
       }
       // lueurs
@@ -541,7 +541,7 @@
         const [a, b] = [...pts.values()];
         const d = Math.hypot(a[0] - b[0], a[1] - b[1]), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
         if (geste.type !== 'deux') { geste = { type: 'deux', d, mx, my }; return; }
-        cam.dist = borne(cam.dist * (geste.d / Math.max(d, 1)), 2.5, 220);
+        cam.dist = borne(cam.dist * (geste.d / Math.max(d, 1)), 2.5, 1500);
         const k = cam.dist / base.foc;
         const dx = mx - geste.mx, dy = my - geste.my;
         for (let i = 0; i < 3; i++) cam.cible[i] -= (base.r[i] * dx - base.u[i] * dy) * k;
@@ -572,7 +572,7 @@
       }
     }
     cv.addEventListener('pointerup', fin); cv.addEventListener('pointercancel', fin);
-    cv.addEventListener('wheel', (e) => { e.preventDefault(); auto = false; cam.dist = borne(cam.dist * Math.exp(e.deltaY * 0.0012), 2.5, 220); sale = true; }, { passive: false });
+    cv.addEventListener('wheel', (e) => { e.preventDefault(); auto = false; cam.dist = borne(cam.dist * Math.exp(e.deltaY * 0.0012), 2.5, 1500); sale = true; }, { passive: false });
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
 
     function choisir(id, glisse) {
